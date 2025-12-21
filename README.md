@@ -44,15 +44,25 @@ data_set['aisle'] = data_set['aisle'].astype('category')
    pd.merge(data_1,data_2,on='id',suffixes=('_prod', '_aisle'))
 
 
-#_4 outliers
+#_4 outliers -----------> i will use boxplot to notice the outliers
+ plt.figure(figsize=(10, 2))
+ np.random.seed(42)
+ 
+data_set['daily_sales'] = np.random.normal(50, 10, len(data_set))---> add fake cloumn
+
+sns.boxplot(x=data_set['daily_sales'])
+Q1 = data_set['daily_sales'].quantile(0.25)
+Q3 = data_set['daily_sales'].quantile(0.75)
+IQR = Q3 - Q1   
    
-   
+lower_bound = Q1 - 1.5 * IQR
+upper_bound = Q3 + 1.5 * IQR  
   
-  
+clean_data = data_set[(data_set['daily_sales'] >= lower_bound) & (data_set['daily_sales'] <= upper_bound)]
 
-
-
-
+plt.figure(figsize=(10, 2))----------------->
+sns.boxplot(x=clean_data['daily_sales'])---->
+plt.show()---------------------------------->just to make sure :)
 
 
 

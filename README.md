@@ -60,12 +60,12 @@ upper_bound = Q3 + 1.5 * IQR
   
 clean_data = data_set[(data_set['daily_sales'] >= lower_bound) & (data_set['daily_sales'] <= upper_bound)]
 
-plt.figure(figsize=(10, 2))----------------->
-sns.boxplot(x=clean_data['daily_sales'])---->
-plt.show()---------------------------------->just to make sure :)
+  plt.figure(figsize=(10, 2))----------------->
+  sns.boxplot(x=clean_data['daily_sales'])---->
+  plt.show()---------------------------------->just to make sure :)
 
 
-
+#_5 EDA
 
 
 

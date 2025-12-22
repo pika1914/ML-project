@@ -1,8 +1,9 @@
 # ML-project
 import pandas as pd
 import numpy as np
-import seaborn as sns # to make boxplot
+import seaborn as sns # to make boxplot ,histogram and heatmap
 import matplotlib.pyplot as plt
+from collections import Counter #for analyis most common names
 import gc
 from sklearn.imput import simpelImputer
 data_set=pd.read_csv("/content/aisles.csv")
@@ -10,7 +11,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-
+                                        #1_data_preprocessing
 #_1     memory optimization
  #Delete unused variables
 del data_set_old
@@ -67,16 +68,39 @@ clean_data = data_set[(data_set['daily_sales'] >= lower_bound) & (data_set['dail
 
 #_5 EDA
 
+ #discover data
+  print(data_set.head())
+  print(data_set.info())
+  print(data_set.describe().T)----> # for easy to read
+  
+ #discoverd the mod
+  all_words = " ".join(data_set['aisle']).split()
+  word_counts = Counter(all_words).most_common(10)
+  words_df = pd.DataFrame(word_counts, columns=['Word', 'Count'])
+  plt.figure(figsize=(10, 5))
+  sns.barplot(data=words_df, x='Count', y='Word', palette='viridis')
+  plt.show()
+
+ # Analysis the Relations
+ plt.figure(figsize=(10, 5))
+ sns.scatterplot(x=data_set['aisle_id'], y=data_set['daily_sales'])
+ plt.show()
 
 
+ #Histogram
+  plt.figure(figsize=(10, 5))
+  sns.histplot(data_set['daily_sales'], kde=True, color='blue')
+  plt.show()
+  
+ #heatmap
+  numeric_data = data_set.select_dtypes(include=[np.number])
+  corr_matrix = numeric_data.corr()
+  plt.figure(figsize=(8, 6))
+  sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+  plt.show()
 
-
-
-
-
-
-
-
+                                         
+   #_2_
 
 
 

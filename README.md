@@ -15,15 +15,24 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
 
+
+
+#fake data
+data_set['user_id'] = np.random.randint(1, 100, len(data_set))
+data_set['order_id'] = range(len(data_set))
+data_set['order_dow'] = np.random.randint(0, 7, len(data_set))
+data_set['order_hour_of_day'] = np.random.randint(0, 24, len(data_set))
+data_set['days_since_prior_order'] = np.random.randint(0, 30, len(data_set))
+data_set['reordered'] = np.random.randint(0, 2, len(data_set))
   #1_data_preprocessing
 #_1     memory optimization
  #Delete unused variables
 if 'data_set_old' in locals(): del data_set_old
 gc.collect()    
  #Transferring decimal points from 64 to 32 bits
-data_set['float_col'] = data_set['float_col'].astype('float32')  
+#data_set['float_col'] = data_set['float_col'].astype('float32')  
  #Transforming the correct numbers
-data_set['int_col'] = data_set['int_col'].astype('int32')
+#data_set['int_col'] = data_set['int_col'].astype('int32')
  #Converting Recurring Texts to Category
 data_set['aisle'] = data_set['aisle'].astype('category')
 #_2 data_cleaning
@@ -43,17 +52,15 @@ data_set['aisle'].fillna(data_set['aisle'].mode()[0], inplace=True) #replace mis
  #Standardizing Columns
 data_set.columns = data_set.columns.str.strip().str.lower().str.replace(' ', '_') # makes all names lower case
 
-#_3 joins and merging
-new_data= pd.merge(left_data,right_data,on='aisles-id',how='left')
-  #to avoid suffixes problem
-pd.merge(data_1,data_2,on='id',suffixes=('_prod', '_aisle'))
+#_3 joins
+
 
 
 #_4 outliers -----------> i will use boxplot to notice the outliers
 plt.figure(figsize=(10, 2))
 np.random.seed(42)
  
-data_set['daily_sales'] = np.random.normal(50, 10, len(data_set))#---> add fake cloumn
+data_set['daily_sales'] = np.random.normal(50, 10, len(data_set)) # add fake cloumn
 
 sns.boxplot(x=data_set['daily_sales'])
 Q1 = data_set['daily_sales'].quantile(0.25)
@@ -139,7 +146,7 @@ def get_time_of_day(hour):
         return 'Evening'
     else:
         return 'Night'
-
+data_set['part_of_day'] = data_set['order_hour_of_day'].apply(get_time_of_day)
 data_set['hour_sin'] = np.sin(2 * np.pi * data_set['order_hour_of_day'] / 24)
 data_set['hour_cos'] = np.cos(2 * np.pi * data_set['order_hour_of_day'] / 24)
 
@@ -149,13 +156,13 @@ print(data_set[['order_dow', 'order_hour_of_day', 'is_weekend', 'part_of_day', '
 data = {
   'aisle': ['fresh fruits','fresh fruits','packaged cheese','fresh fruits','water','packaged cheese','water','fresh fruits', 'yogurt', 'fresh fruits'] }
  
-data_set = pd.DataFrame(data)
+dummy_df = pd.DataFrame(data)
 
 freq_map = data_set['aisle'].value_counts(normalize=True)
 data_set['aisle_freq_enc'] = data_set['aisle'].map(freq_map)
 
 np.random.seed(42)
-data_set['is_reordered'] = np.random.randint(0, 2, 10)
+data_set['is_reordered'] = np.random.randint(0, 2, len(data_set))
 
 target_map = data_set.groupby('aisle')['is_reordered'].mean() #----->calculat the mean
 data_set['aisle_target_enc'] = data_set['aisle'].map(target_map)
@@ -166,7 +173,14 @@ print(data_set.sort_values(by='aisle'))
 
 
  #Task_A
-features = ['aisle_encoded', 'order_dow', 'days_since_prior', 'user_total_orders']
+user_orders_count = data_set.groupby('user_id')['order_id'].count().reset_index()
+user_orders_count.columns = ['user_id', 'user_total_orders']
+if 'user_total_orders' not in data_set.columns:
+    data_set = data_set.merge(user_orders_count, on='user_id', how='left')
+data_set = data_set.dropna(subset=['aisle_freq_enc', 'order_dow', 'days_since_prior_order', 'user_total_orders'])
+
+
+features = ['aisle_freq_enc', 'order_dow', 'days_since_prior_order', 'user_total_orders']
 X = data_set[features]
 y = data_set['reordered']
 

@@ -164,7 +164,7 @@ data_set['aisle_freq_enc'] = data_set['aisle'].map(freq_map)
 np.random.seed(42)
 data_set['is_reordered'] = np.random.randint(0, 2, len(data_set))
 
-target_map = data_set.groupby('aisle')['is_reordered'].mean() #----->calculat the mean
+target_map = data_set.groupby('aisle', observed=True)['is_reordered'].mean()  #----->calculat the mean
 data_set['aisle_target_enc'] = data_set['aisle'].map(target_map)
 
 print(data_set.sort_values(by='aisle'))

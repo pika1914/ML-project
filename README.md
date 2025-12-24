@@ -281,6 +281,103 @@ print("\nModel Performance Summary (Accuracy):")
 for name, acc in sorted(results.items(), key=lambda x: x[1], reverse=True):
     print(f"{name}: {acc:.4f}")
 
+# _4_Regression (Task B)
+
+from sklearn.linear_model import LinearRegression, Lasso, Ridge, ElasticNet
+from sklearn.svm import SVR
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor, StackingRegressor
+from xgboost import XGBRegressor
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
+
+np.random.seed(42)
+data_set['days_to_next_order'] = np.random.randint(1, 30, len(data_set))
+
+feature_cols_reg = ['user_avg_days', 'aisle_popularity', 'user_bought_aisle_times','is_weekend', 'hour_sin', 'hour_cos', 'aisle_freq_enc','aisle_target_enc','daily_sales']
+
+df_reg = data_set[feature_cols_reg + ['days_to_next_order']].dropna()
+
+X_reg = df_reg[feature_cols_reg]
+y_reg = df_reg['days_to_next_order']
+
+X_train_r, X_test_r, y_train_r, y_test_r = train_test_split(X_reg, y_reg, test_size=0.2, random_state=42)
+
+scaler_r = StandardScaler()
+X_train_r_scaled = scaler_r.fit_transform(X_train_r)
+X_test_r_scaled = scaler_r.transform(X_test_r)
+
+reg_results = {}
+
+def evaluate_regressor(name, model, X_tr, X_te, y_tr, y_te):
+    start_time = time.time()
+    model.fit(X_tr, y_tr)
+    train_time = time.time() - start_time
+    
+    y_pred = model.predict(X_te)
+    
+    rmse = np.sqrt(mean_squared_error(y_te, y_pred))
+    mae = mean_absolute_error(y_te, y_pred)
+    r2 = r2_score(y_te, y_pred)
+    
+    print(f"--- {name} ---")
+    print(f"RMSE: {rmse:.4f}")
+    print(f"MAE:  {mae:.4f}")
+    print(f"R2:   {r2:.4f}")
+    print(f"Time: {train_time:.4f} sec")
+    print("-" * 30)
+    
+    reg_results[name] = rmse
+
+print("\n" + "="*40)
+print(" STARTING TASK B: REGRESSION ")
+print("="*40 + "\n")
+
+lr_reg = LinearRegression()
+evaluate_regressor("Linear Regression", lr_reg, X_train_r_scaled, X_test_r_scaled, y_train_r, y_test_r)
+
+lasso = Lasso(alpha=0.1, random_state=42)
+evaluate_regressor("Lasso (L1)", lasso, X_train_r_scaled, X_test_r_scaled, y_train_r, y_test_r)
+
+ridge = Ridge(alpha=1.0, random_state=42)
+evaluate_regressor("Ridge (L2)", ridge, X_train_r_scaled, X_test_r_scaled, y_train_r, y_test_r)
+
+enet = ElasticNet(alpha=0.1, l1_ratio=0.5, random_state=42)
+evaluate_regressor("Elastic Net", enet, X_train_r_scaled, X_test_r_scaled, y_train_r, y_test_r)
+
+svr_lin = SVR(kernel='linear')
+evaluate_regressor("SVR (Linear)", svr_lin, X_train_r_scaled, X_test_r_scaled, y_train_r, y_test_r)
+
+svr_rbf = SVR(kernel='rbf')
+evaluate_regressor("SVR (RBF)", svr_rbf, X_train_r_scaled, X_test_r_scaled, y_train_r, y_test_r)
+
+knn_reg = KNeighborsRegressor(n_neighbors=5)
+evaluate_regressor("KNN Regressor", knn_reg, X_train_r_scaled, X_test_r_scaled, y_train_r, y_test_r)
+
+dt_reg = DecisionTreeRegressor(max_depth=10, random_state=42)
+evaluate_regressor("Decision Tree Regressor", dt_reg, X_train_r, X_test_r, y_train_r, y_test_r)
+
+rf_reg = RandomForestRegressor(n_estimators=100, random_state=42)
+evaluate_regressor("Random Forest Regressor", rf_reg, X_train_r, X_test_r, y_train_r, y_test_r)
+
+xgb_reg = XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42)
+evaluate_regressor("XGBoost Regressor", xgb_reg, X_train_r, X_test_r, y_train_r, y_test_r)
+
+estimators_reg = [
+    ('rf', RandomForestRegressor(n_estimators=50, random_state=42)),
+    ('xgb', XGBRegressor(n_estimators=50, random_state=42))
+]
+stack_reg = StackingRegressor(estimators=estimators_reg, final_estimator=LinearRegression())
+evaluate_regressor("Stacking Regressor", stack_reg, X_train_r, X_test_r, y_train_r, y_test_r)
+
+print("\nRegression Model Performance (Sorted by RMSE - Lower is Better):")
+for name, rmse in sorted(reg_results.items(), key=lambda x: x[1]):
+    print(f"{name}: {rmse:.4f}")
+
+
+
+
+
 
 
 

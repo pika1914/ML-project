@@ -53,8 +53,37 @@ data_set['aisle'].fillna(data_set['aisle'].mode()[0], inplace=True) #replace mis
 data_set.columns = data_set.columns.str.strip().str.lower().str.replace(' ', '_') # makes all names lower case
 
 #_3 joins
+aisles = pd.read_csv('aisles.csv')
+products = pd.DataFrame({
+    'product_id': [1, 2, 3, 4, 5],
+    'product_name': ['Banana', 'Milk', 'Bread', 'Soda', 'Cheese'],
+    'aisle_id': [24, 84, 112, 77, 21], 
+    'department_id': [4, 16, 3, 7, 16]
+})
 
+order_products = pd.DataFrame({
+    'order_id': [101, 101, 102, 103, 104],
+    'product_id': [1, 2, 1, 4, 5], 
+    'add_to_cart_order': [1, 2, 1, 1, 1]
+})
+print("Order Products:\n", order_products.head(2))
+print("Products:\n", products.head(2))
+print("Aisles:\n", aisles.head(2))
 
+merged_df = pd.merge(
+    left=order_products, 
+    right=products, 
+    on='product_id', 
+    how='left'
+)
+
+final_df = pd.merge(
+    left=merged_df,
+    right=aisles,
+    on='aisle_id',
+    how='left'
+)
+print(final_df[['order_id', 'product_name', 'aisle']].to_markdown(index=False))
 
 #_4 outliers -----------> i will use boxplot to notice the outliers
 plt.figure(figsize=(10, 2))
@@ -172,27 +201,94 @@ print(data_set.sort_values(by='aisle'))
 #_3_Classification
 
 
- #Task_A
-user_orders_count = data_set.groupby('user_id')['order_id'].count().reset_index()
-user_orders_count.columns = ['user_id', 'user_total_orders']
-if 'user_total_orders' not in data_set.columns:
-    data_set = data_set.merge(user_orders_count, on='user_id', how='left')
-data_set = data_set.dropna(subset=['aisle_freq_enc', 'order_dow', 'days_since_prior_order', 'user_total_orders'])
+from sklearn.model_selection import train_test_split, StratifiedKFold
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, StackingClassifier
+from xgboost import XGBClassifier
+from sklearn.metrics import accuracy_score, classification_report, f1_score
+import time
 
 
-features = ['aisle_freq_enc', 'order_dow', 'days_since_prior_order', 'user_total_orders']
-X = data_set[features]
-y = data_set['reordered']
+feature_cols = ['user_avg_days', 'aisle_popularity', 'user_bought_aisle_times','is_weekend', 'hour_sin', 'hour_cos', 'aisle_freq_enc','aisle_target_enc', 'daily_sales' ]
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-  
-clf = RandomForestClassifier(n_estimators=100, random_state=42)
-clf.fit(X_train, y_train)
+df_model = data_set[feature_cols + ['is_reordered']].dropna()
 
-y_pred = clf.predict(X_test)
-  
+X = df_model[feature_cols]
+y = df_model['is_reordered']
 
-print(classification_report(y_test, y_pred))
-print("Accuracy:", round(accuracy_score(y_test, y_pred), 2))
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+results = {}
+
+
+def evaluate_model(name, model, X_tr, X_te, y_tr, y_te):
+    start_time = time.time()
+    model.fit(X_tr, y_tr)
+    train_time = time.time() - start_time
+    
+    y_pred = model.predict(X_te)
+    acc = accuracy_score(y_te, y_pred)
+    f1 = f1_score(y_te, y_pred)
+
+    print(f"--- {name} ---")
+    print(f"Accuracy: {acc:.4f}")
+    print(f"F1 Score: {f1:.4f}")
+    print(f"Training Time: {train_time:.4f} seconds")
+    print("-" * 30)    
+    results[name] = acc
+
+lr = LogisticRegression(penalty='l2', class_weight='balanced', solver='lbfgs', max_iter=1000, random_state=42)
+evaluate_model("Logistic Regression", lr, X_train_scaled, X_test_scaled, y_train, y_test)
+
+
+knn = KNeighborsClassifier(n_neighbors=5)
+evaluate_model("KNN", knn, X_train_scaled, X_test_scaled, y_train, y_test)
+
+svm_linear = SVC(kernel='linear', probability=True, random_state=42)
+evaluate_model("SVM (Linear)", svm_linear, X_train_scaled, X_test_scaled, y_train, y_test)
+
+svm_rbf = SVC(kernel='rbf', probability=True, random_state=42)
+evaluate_model("SVM (RBF)", svm_rbf, X_train_scaled, X_test_scaled, y_train, y_test)
+
+dt = DecisionTreeClassifier(max_depth=10, random_state=42)
+evaluate_model("Decision Tree", dt, X_train, X_test, y_train, y_test)
+
+
+rf = RandomForestClassifier(n_estimators=100, random_state=42)
+evaluate_model("Random Forest", rf, X_train, X_test, y_train, y_test)
+
+xgb = XGBClassifier(n_estimators=100, learning_rate=0.1, eval_metric='logloss', random_state=42)
+evaluate_model("XGBoost", xgb, X_train, X_test, y_train, y_test)
+
+estimators = [
+    ('rf', RandomForestClassifier(n_estimators=50, random_state=42)),
+    ('xgb', XGBClassifier(n_estimators=50, eval_metric='logloss', random_state=42))
+]
+
+stacking_clf = StackingClassifier(estimators=estimators, final_estimator=LogisticRegression())
+evaluate_model("Stacking Classifier", stacking_clf, X_train, X_test, y_train, y_test)
+
+print("\nModel Performance Summary (Accuracy):")
+for name, acc in sorted(results.items(), key=lambda x: x[1], reverse=True):
+    print(f"{name}: {acc:.4f}")
+
+
+
+
+
+
+
+
+
+
 
 

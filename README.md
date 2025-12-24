@@ -384,13 +384,9 @@ xgb_reg = XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42)
 evaluate_regressor("XGBoost Regressor", xgb_reg, X_train_r, X_test_r, y_train_r, y_test_r)
 
 #print_all
-print("\nRegression Model Performance (Sorted by RMSE - Lower is Better):")
-for name, rmse in sorted(reg_results.items(), key=lambda x: x[1]):
-    print(f"{name}: {rmse:.4f}")
-
-
-
-
+df_reg = pd.DataFrame(list(reg_results.items()), columns=['Model', 'RMSE'])
+df_reg = df_reg.sort_values(by='RMSE', ascending=True)
+df_reg
 
 
 

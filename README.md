@@ -1,4 +1,6 @@
 # ML-project
+from google.colab import drive
+drive.mount('/content/drive')
 import pandas as pd
 import numpy as np
 import seaborn as sns # to make boxplot ,histogram and heatmap
@@ -6,7 +8,10 @@ import matplotlib.pyplot as plt
 from collections import Counter #for analyis most common names
 import gc
 from sklearn.impute import SimpleImputer
-data_set=pd.read_csv("/content/aisles.csv")
+import glob
+import os
+path = '/content/drive/MyDrive/ML/*.csv'
+df = dd.read_csv(path)
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -53,37 +58,7 @@ data_set['aisle'].fillna(data_set['aisle'].mode()[0], inplace=True) #replace mis
 data_set.columns = data_set.columns.str.strip().str.lower().str.replace(' ', '_') # makes all names lower case
 
 #_3 joins
-aisles = pd.read_csv('aisles.csv')
-products = pd.DataFrame({
-    'product_id': [1, 2, 3, 4, 5],
-    'product_name': ['Banana', 'Milk', 'Bread', 'Soda', 'Cheese'],
-    'aisle_id': [24, 84, 112, 77, 21], 
-    'department_id': [4, 16, 3, 7, 16]
-})
 
-order_products = pd.DataFrame({
-    'order_id': [101, 101, 102, 103, 104],
-    'product_id': [1, 2, 1, 4, 5], 
-    'add_to_cart_order': [1, 2, 1, 1, 1]
-})
-print("Order Products:\n", order_products.head(2))
-print("Products:\n", products.head(2))
-print("Aisles:\n", aisles.head(2))
-
-merged_df = pd.merge(
-    left=order_products, 
-    right=products, 
-    on='product_id', 
-    how='left'
-)
-
-final_df = pd.merge(
-    left=merged_df,
-    right=aisles,
-    on='aisle_id',
-    how='left'
-)
-print(final_df[['order_id', 'product_name', 'aisle']].to_markdown(index=False))
 
 #_4 outliers -----------> i will use boxplot to notice the outliers
 plt.figure(figsize=(10, 2))

@@ -7,6 +7,7 @@ import seaborn as sns # to make boxplot ,histogram and heatmap
 import matplotlib.pyplot as plt
 from collections import Counter #for analyis most common names
 import gc
+import dask.dataframe as dd
 from sklearn.impute import SimpleImputer
 import glob
 import os
@@ -19,42 +20,309 @@ from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, MinMaxScaler
+from sklearn.model_selection import KFold
+
+sns.set_style("whitegrid")
+plt.rcParams['figure.figsize'] = (12, 6)
+
+def reduce_mem_usage(df):
+    start_mem = df.memory_usage().sum() / 1024**2
+    print(f'Initial Memory: {start_mem:.2f} MB')
+    
+    for col in df.columns:
+        col_type = df[col].dtype
+        if col_type != object:
+            c_min = df[col].min()
+            c_max = df[col].max()
+            if str(col_type)[:3] == 'int':
+                if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
+                    df[col] = df[col].astype(np.int8)
+                elif c_min > np.iinfo(np.int16).min and c_max < np.iinfo(np.int16).max:
+                    df[col] = df[col].astype(np.int16)
+                elif c_min > np.iinfo(np.int32).min and c_max < np.iinfo(np.int32).max:
+                    df[col] = df[col].astype(np.int32)
+            else:
+                if c_min > np.finfo(np.float32).min and c_max < np.finfo(np.float32).max:
+                    df[col] = df[col].astype(np.float32)
+                else:
+                    df[col] = df[col].astype(np.float64)
+        else:
+            df[col] = df[col].astype('category')
+
+    end_mem = df.memory_usage().sum() / 1024**2
+    print(f'Final Memory: {end_mem:.2f} MB')
+    return df
 
 
 
-#fake data
-data_set['user_id'] = np.random.randint(1, 100, len(data_set))
-data_set['order_id'] = range(len(data_set))
-data_set['order_dow'] = np.random.randint(0, 7, len(data_set))
-data_set['order_hour_of_day'] = np.random.randint(0, 24, len(data_set))
-data_set['days_since_prior_order'] = np.random.randint(0, 30, len(data_set))
-data_set['reordered'] = np.random.randint(0, 2, len(data_set))
-  #1_data_preprocessing
-#_1     memory optimization
- #Delete unused variables
-if 'data_set_old' in locals(): del data_set_old
-gc.collect()    
- #Transferring decimal points from 64 to 32 bits
-#data_set['float_col'] = data_set['float_col'].astype('float32')  
- #Transforming the correct numbers
-#data_set['int_col'] = data_set['int_col'].astype('int32')
- #Converting Recurring Texts to Category
-data_set['aisle'] = data_set['aisle'].astype('category')
-#_2 data_cleaning
- #first look
-print(data_set.info())
-print(data_set.describe())
+path = '/content/drive/MyDrive/ML/'
 
- #delet Duplicates
-print(f"Number of duplicate IDs: {data_set.duplicated().sum()}")
-data_set.drop_duplicates(inplace=True)
+orders = reduce_mem_usage(pd.read_csv(path + 'orders.csv'))
+products = reduce_mem_usage(pd.read_csv(path + 'products.csv'))
+departments = reduce_mem_usage(pd.read_csv(path + 'departments.csv'))
+
+order_products = reduce_mem_usage(pd.read_csv(path + 'order_products__train.csv'))
+aisles = reduce_mem_usage(pd.read_csv(path + 'aisles.csv'))
 
 
- #processe Missing Values
+print("Merging Data...")
+
+
+df = pd.merge(order_products, orders, on='order_id', how='left')
+
+df = pd.merge(df, products, on='product_id', how='left')
+
+df = pd.merge(df, departments, on='department_id', how='left')
+
+
+del orders, products, departments, order_products, aisles
+gc.collect()
+
+print("Data Loaded and Merged Successfully.")
+plt.figure(figsize=(10, 5))
+sns.histplot(df['days_since_prior_order'], bins=30, kde=False, color='skyblue')
+plt.title('Distribution of Days Since Prior Order')
+plt.xlabel('Days')
+plt.ylabel('Count')
+plt.show()
+
+#Missing Value Analysis
+
+missing_values = df.isnull().sum()
+missing_percent = (missing_values / len(df)) * 100
+print("\nMissing Values:\n", missing_values[missing_values > 0])
+
+plt.figure(figsize=(8, 4))
+sns.barplot(x=missing_percent.index, y=missing_percent.values, palette='Reds_r')
+plt.title("Percentage of Missing Values per Feature")
+plt.ylabel("Percent %")
+plt.xticks(rotation=45)
+plt.show()
+
+plt.figure(figsize=(10, 5))
+sns.histplot(df['days_since_prior_order'].dropna(), bins=30, kde=True, color='teal')
+plt.title('Distribution of Days Since Prior Order')
+plt.xlabel('Days')
+plt.show()
+
+
+top_depts = df['department'].value_counts().head(10)
+plt.figure(figsize=(12, 5))
+sns.barplot(x=top_depts.index, y=top_depts.values, palette='viridis')
+plt.title('Top 10 Best Selling Departments (Cardinality Analysis)')
+plt.xticks(rotation=45)
+plt.show()
+
+
+sample_heatmap = df.sample(n=min(100000, len(df)), random_state=42)
+heatmap_data = sample_heatmap.groupby(['order_dow', 'order_hour_of_day']).size().unstack()
+
+
+plt.figure(figsize=(12, 6))
+sns.heatmap(heatmap_data, cmap="YlGnBu", annot=False)
+plt.title("Seasonality Heatmap: Order Volume by Day & Hour")
+plt.xlabel('Hour of Day')
+plt.ylabel('Day of Week')
+plt.show()
+
+
+numeric_cols = ['order_number', 'order_dow', 'order_hour_of_day', 
+                'days_since_prior_order', 'add_to_cart_order', 'reordered']
+corr_matrix = df[numeric_cols].corr()
+
+plt.figure(figsize=(10, 8))
+sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+plt.title("Correlation Matrix for Numeric Features")
+plt.show()
+
+
+print("\nImputing Missing Values...")
+df['days_since_prior_order'] = df['days_since_prior_order'].fillna(-1)
+print(f"Missing values in 'days_since_prior_order' after imputation: {df['days_since_prior_order'].isnull().sum()}")
+
+
+plt.figure(figsize=(10, 2))
+sns.boxplot(x=df['add_to_cart_order'])
+plt.title("Boxplot: Add to Cart Order (Before Winsorizing)")
+plt.show()
+
+
+
+
+upper_limit = df['add_to_cart_order'].quantile(0.99)
+print(f"Capping outliers for 'add_to_cart_order' at 99th percentile: {upper_limit}")
+
+df.loc[df['add_to_cart_order'] > upper_limit, 'add_to_cart_order'] = upper_limit
+
+plt.figure(figsize=(10, 2))
+sns.boxplot(x=df['add_to_cart_order'])
+plt.title("Boxplot: Add to Cart Order (After Winsorizing)")
+plt.show()
+
+print("\nStep 1 (Ingestion), Step 2 (EDA), and Step 3 (Cleaning) Completed Successfully!")
+
+#4_Encoding Categorical Variables
+
+
+if 'reordered' not in df.columns:
+    print("تنبيه: عمود reordered غير موجود، تأكد من دمج ملف order_products بشكل صحيح.")
+else:
+    print("Target variable 'reordered' found. Proceeding with Encoding...")
+
+print("Applying One-Hot Encoding on 'department'...")
+
+df = pd.get_dummies(df, columns=['department'], prefix='dept', drop_first=True)
+
+print(f"New columns created: {[col for col in df.columns if 'dept_' in col][:5]} ...")
+
+print("Applying Frequency Encoding on 'product_id'...")
+
+product_freq = df['product_id'].value_counts(normalize=True)
+
+df['product_freq_enc'] = df['product_id'].map(product_freq)
+
+print("Applying Target Encoding with K-Fold on 'aisle_id'...")
+
+kf = KFold(n_splits=5, shuffle=True, random_state=42)
+
+df['aisle_target_enc'] = np.nan
+
+for train_index, val_index in kf.split(df):
+
+  X_train, X_val = df.iloc[train_index], df.iloc[val_index]
+
+  means = X_train.groupby('aisle_id')['reordered'].mean()
+
+  df.loc[val_index, 'aisle_target_enc'] = X_val['aisle_id'].map(means)
+
+global_mean = df['reordered'].mean()
+df['aisle_target_enc'] = df['aisle_target_enc'].fillna(global_mean)
+
+print("\nComparing Encoding Impact (Correlation with Target 'reordered'):")
+
+encoding_cols = ['product_freq_enc', 'aisle_target_enc']
+
+dept_col = [col for col in df.columns if 'dept_' in col][0]
+encoding_cols.append(dept_col)
+
+
+correlations = df[encoding_cols + ['reordered']].corr()['reordered'].drop('reordered')
+print(correlations.sort_values(ascending=False))
+
+print("\nEncoding Step Completed Successfully.")
+print(df[['product_id', 'product_freq_enc', 'aisle_id', 'aisle_target_enc', 'reordered']].head())
+
+
+# 5. Feature Engineering (MANDATORY LIST)
+
+orders_meta = pd.read_csv(path + 'orders.csv', usecols=['user_id', 'order_number', 'days_since_prior_order'])
+
+user_stats = orders_meta.groupby('user_id').agg({'order_number': 'max', 'days_since_prior_order': 'mean' }).rename(columns={'order_number': 'user_total_orders','days_since_prior_order': 'user_avg_days_between_orders'})
+
+user_basket_stats = df.groupby('user_id').agg({ 'reordered': 'mean','product_id': 'count' }).rename(columns={ 'reordered': 'user_reorder_ratio', 'product_id': 'avg_basket_size'})
+
+df = df.merge(user_stats, on='user_id', how='left')
+df = df.merge(user_basket_stats, on='user_id', how='left')
+
+del orders_meta, user_stats, user_basket_stats
+gc.collect()
+print("User features created.")
+
+product_stats = df.groupby('product_id').agg({
+    'reordered': 'mean', 
+    'add_to_cart_order': 'mean', 
+    'order_id': 'count' 
+}).rename(columns={
+    'reordered': 'prod_reorder_rate',
+    'add_to_cart_order': 'prod_avg_position',
+    'order_id': 'prod_popularity'
+})
+
+
+df = df.merge(product_stats, on='product_id', how='left')
+del product_stats
+gc.collect()
+print("Product features created.")
+
+user_prod_stats = df.groupby(['user_id', 'product_id']).agg({
+    'order_id': 'count', 
+    'reordered': 'mean' 
+}).rename(columns={
+    'order_id': 'up_purchase_count',
+    'reordered': 'up_reorder_prob'
+})
+
+
+df = df.merge(user_prod_stats, on=['user_id', 'product_id'], how='left')
+del user_prod_stats
+gc.collect()
+print("User-Product interaction features created.")
+
+
+df['hour_sin'] = np.sin(2 * np.pi * df['order_hour_of_day'] / 24)
+df['hour_cos'] = np.cos(2 * np.pi * df['order_hour_of_day'] / 24)
+
+df['is_weekend'] = df['order_dow'].isin([0, 1]).astype(int)
+
+df['interaction_popularity_loyalty'] = np.log1p(df['prod_popularity']) * df['user_total_orders']
+
+
+print("\nStarting Feature Scaling...")
+from sklearn.preprocessing import StandardScaler
+
+scale_cols = [
+    'user_total_orders', 'user_avg_days_between_orders', 'user_reorder_ratio', 'avg_basket_size',
+    'prod_reorder_rate', 'prod_avg_position', 'prod_popularity',
+    'up_purchase_count', 'up_reorder_prob',
+    'days_since_prior_order', 'interaction_popularity_loyalty'
+]
+
+for col in scale_cols:
+    df[col] = df[col].fillna(df[col].mean())
+
+scaler = StandardScaler()
+
+scaled_features = scaler.fit_transform(df[scale_cols])
+df_scaled = pd.DataFrame(scaled_features, columns=[f'scl_{c}' for c in scale_cols], index=df.index)
+
+
+df = pd.concat([df, df_scaled], axis=1)
+
+print("Feature Engineering & Scaling Completed Successfully.")
+print(f"New Scaled Columns: {df_scaled.columns.tolist()}")
+print(df.head())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#processe Missing Values
 print(data_set.isnull().sum())  #test for missing values
 data_set['aisle'].fillna(data_set['aisle'].mode()[0], inplace=True) #replace missing values to mode
 
- #Standardizing Columns
+#Standardizing Columns
 data_set.columns = data_set.columns.str.strip().str.lower().str.replace(' ', '_') # makes all names lower case
 
 #_3 joins

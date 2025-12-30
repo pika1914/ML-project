@@ -293,6 +293,406 @@ print("Feature Engineering & Scaling Completed Successfully.")
 print(f"New Scaled Columns: {df_scaled.columns.tolist()}")
 print(df.head())
 
+# 6. Advanced Feature Engineering
+
+if 'prod_popularity' in df.columns and 'user_total_orders' in df.columns:
+    df['interaction_user_prod_rank'] = df['prod_popularity'] * df['user_total_orders']
+
+df['log_days_since_prior'] = np.log1p(df['days_since_prior_order'])
+
+
+df['user_order_frequency'] = df['user_total_orders'] / (df['user_avg_days_between_orders'] + 1)
+
+print("Advanced features created: ['interaction_user_prod_rank', 'log_days_since_prior', 'user_order_frequency']")
+
+# 7. Dimensionality & Multicollinearity (VIF)
+
+print("\n=== Step 7: Multicollinearity Check (VIF) ===")
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+
+numeric_feats = ['user_total_orders', 'user_avg_days_between_orders', 
+                 'avg_basket_size', 'days_since_prior_order', 
+                 'prod_reorder_rate', 'user_reorder_ratio']
+
+
+X_vif = df[numeric_feats].fillna(df[numeric_feats].mean())
+
+X_vif_sample = X_vif.sample(n=10000, random_state=42)
+
+
+vif_data = pd.DataFrame()
+vif_data["Feature"] = numeric_feats
+vif_data["VIF"] = [variance_inflation_factor(X_vif_sample.values, i) 
+                   for i in range(len(numeric_feats))]
+
+print(vif_data.sort_values(by="VIF", ascending=False))
+print("\nNote: VIF > 5 or 10 indicates high multicollinearity. Consider removing these features.")
+
+
+
+# 8. Imbalanced Data Handling
+
+
+target_count = df['reordered'].value_counts()
+print("Class Distribution:\n", target_count)
+print("Ratio (0:1):", target_count[0] / target_count[1])
+
+plt.figure(figsize=(6, 4))
+sns.countplot(x='reordered', data=df, palette='pastel')
+plt.title('Target Class Distribution (Imbalanced)')
+plt.show()
+
+
+
+from sklearn.utils.class_weight import compute_class_weight
+class_weights = compute_class_weight(class_weight='balanced', 
+                                     classes=np.unique(df['reordered']), 
+                                     y=df['reordered'])
+class_weight_dict = dict(zip(np.unique(df['reordered']), class_weights))
+print("Computed Class Weights:", class_weight_dict)
+
+
+from imblearn.over_sampling import SMOTE
+smote = SMOTE(random_state=42)
+print("SMOTE object initialized (Apply strictly within training loop/pipeline to avoid leakage).")
+
+
+
+# 9. Time-Aware Splitting
+
+
+unique_users = df['user_id'].unique()
+train_users, val_users = train_test_split(unique_users, test_size=0.2, random_state=42)
+
+print(f"Total Users: {len(unique_users)}")
+print(f"Train Users: {len(train_users)}")
+print(f"Validation Users: {len(val_users)}")
+
+X_train_full = df[df['user_id'].isin(train_users)]
+
+
+X_val_full = df[df['user_id'].isin(val_users)]
+
+print(f"Train Set Shape: {X_train_full.shape}")
+print(f"Validation Set Shape: {X_val_full.shape}")
+
+
+features_to_drop = ['order_id', 'user_id', 'product_id', 'eval_set', 
+                    'product_name', 'department', 'aisle'] # وأي عمود نصي آخر
+target_col = 'reordered'
+
+
+
+available_features = [c for c in X_train_full.columns if c not in features_to_drop and c != target_col]
+
+print(f"\nFinal Features List ({len(available_features)}):")
+print(available_features[:10], "...")
+
+
+
+
+
+X_train = X_train_full[available_features].fillna(0) # تعويض بسيط لما تبقى
+y_train = X_train_full[target_col]
+
+X_val = X_val_full[available_features].fillna(0)
+y_val = X_val_full[target_col]
+
+print("\nData Splits Ready for Modeling.")
+
+
+# Task A: Classification
+
+import time
+from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, StackingClassifier
+from xgboost import XGBClassifier
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, classification_report
+
+
+models = {
+    # Logistic Regression: L2 penalty (Ridge) default, Class Weighted
+    "Logistic Regression": make_pipeline(
+        StandardScaler(),
+        LogisticRegression(penalty='l2', C=1.0, class_weight='balanced', solver='lbfgs', max_iter=1000, random_state=42)
+    ),
+    
+    
+    "KNN (k=5)": make_pipeline(
+        StandardScaler(),
+        KNeighborsClassifier(n_neighbors=5)
+    ),
+    
+    
+    "Decision Tree": DecisionTreeClassifier(max_depth=10, class_weight='balanced', random_state=42),
+    
+    
+    "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=15, class_weight='balanced', random_state=42, n_jobs=-1),
+    
+    
+    "XGBoost": XGBClassifier(
+        n_estimators=100, 
+        max_depth=6, 
+        learning_rate=0.1, 
+        eval_metric='logloss',
+        scale_pos_weight=10, 
+        random_state=42, 
+        n_jobs=-1
+    )
+}
+
+
+
+svm_model = make_pipeline(
+    StandardScaler(),
+    SVC(kernel='rbf', C=1.0, probability=True, class_weight='balanced', random_state=42)
+)
+
+
+results_df = []
+
+for name, model in models.items():
+    print(f"\nTraining {name}...")
+    start_time = time.time()
+    
+  
+    model.fit(X_train, y_train)
+    
+   
+    y_pred = model.predict(X_val)
+    y_prob = model.predict_proba(X_val)[:, 1] if hasattr(model, "predict_proba") else model.steps[-1][1].predict_proba(X_val)[:, 1]
+    
+    
+    acc = accuracy_score(y_val, y_pred)
+    f1 = f1_score(y_val, y_pred)
+    auc = roc_auc_score(y_val, y_prob)
+    elapsed = time.time() - start_time
+    
+    print(f"--> Done. Accuracy: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f} ({elapsed:.2f}s)")
+    
+    results_df.append({
+        "Model": name,
+        "Accuracy": acc,
+        "F1-Score": f1,
+        "AUC-ROC": auc,
+        "Time (s)": elapsed
+    })
+
+X_train_sub = X_train.iloc[:20000]
+y_train_sub = y_train.iloc[:20000]
+
+svm_configs = [
+    ("SVM (Linear)", SVC(kernel='linear', probability=True, class_weight='balanced', random_state=42)),
+    ("SVM (RBF)", SVC(kernel='rbf', probability=True, class_weight='balanced', random_state=42))
+]
+
+
+for name, clf in svm_configs:
+    start_time = time.time()
+    model = make_pipeline(StandardScaler(), clf) # Scaling is crucial for SVM
+    model.fit(X_train_sub, y_train_sub)
+    
+    y_pred = model.predict(X_val) 
+    y_prob = model.predict_proba(X_val)[:, 1]
+    
+    acc = accuracy_score(y_val, y_pred)
+    f1 = f1_score(y_val, y_pred)
+    auc = roc_auc_score(y_val, y_prob)
+    elapsed = time.time() - start_time
+    
+    print(f"--> {name} Done (Subset Train). Acc: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
+    results_df.append({"Model": name + " (Subset)", "Accuracy": acc, "F1-Score": f1, "AUC-ROC": auc, "Time (s)": elapsed})
+
+
+estimators = [
+    ('rf', RandomForestClassifier(n_estimators=50, max_depth=10, random_state=42)),
+    ('xgb', XGBClassifier(n_estimators=50, max_depth=5, eval_metric='logloss', random_state=42))
+]
+stacking_clf = StackingClassifier(
+    estimators=estimators,
+    final_estimator=LogisticRegression(),
+    cv=3 
+)
+
+start_time = time.time()
+stacking_clf.fit(X_train, y_train)
+y_pred_stack = stacking_clf.predict(X_val)
+y_prob_stack = stacking_clf.predict_proba(X_val)[:, 1]
+
+acc = accuracy_score(y_val, y_pred_stack)
+f1 = f1_score(y_val, y_pred_stack)
+auc = roc_auc_score(y_val, y_prob_stack)
+elapsed = time.time() - start_time
+
+print(f"--> Stacking Done. Acc: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
+results_df.append({"Model": "Stacking Classifier", "Accuracy": acc, "F1-Score": f1, "AUC-ROC": auc, "Time (s)": elapsed})
+
+
+print("\n=== Final Model Comparison ===")
+final_results = pd.DataFrame(results_df).sort_values(by="AUC-ROC", ascending=False)
+print(final_results)
+
+
+plt.figure(figsize=(10, 5))
+sns.barplot(x="AUC-ROC", y="Model", data=final_results, palette="viridis")
+plt.title("Model Comparison (AUC-ROC Score)")
+plt.xlim(0, 1.0)
+plt.show()
+
+
+# Task B: Regression
+from sklearn.linear_model import LinearRegression, Lasso, Ridge, ElasticNet
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.svm import SVR
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, StackingRegressor
+from xgboost import XGBRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+df_reg = df[df['days_since_prior_order'] >= 0].copy()
+
+target_reg = 'days_since_prior_order'
+
+
+drop_cols_reg = [target_reg, 'log_days_since_prior', 'order_id', 'user_id', 
+                 'product_id', 'eval_set', 'product_name', 'department', 'aisle']
+
+features_reg = [c for c in df_reg.columns if c not in drop_cols_reg]
+print(f"Regression Features ({len(features_reg)}): {features_reg}")
+
+train_users_reg, val_users_reg = train_test_split(df_reg['user_id'].unique(), test_size=0.2, random_state=42)
+
+X_train_reg = df_reg[df_reg['user_id'].isin(train_users_reg)][features_reg].fillna(0)
+y_train_reg = df_reg[df_reg['user_id'].isin(train_users_reg)][target_reg]
+
+X_val_reg = df_reg[df_reg['user_id'].isin(val_users_reg)][features_reg].fillna(0)
+y_val_reg = df_reg[df_reg['user_id'].isin(val_users_reg)][target_reg]
+
+
+scaler_reg = StandardScaler()
+X_train_reg_s = scaler_reg.fit_transform(X_train_reg)
+X_val_reg_s = scaler_reg.transform(X_val_reg)
+
+reg_models = {
+    # Ordinary Least Squares & Regularized Variants
+    "Linear Regression": LinearRegression(),
+    "Lasso (L1)": Lasso(alpha=0.1, random_state=42),
+    "Ridge (L2)": Ridge(alpha=1.0, random_state=42),
+    "Elastic Net": ElasticNet(alpha=0.1, l1_ratio=0.5, random_state=42),
+    
+    # KNN Regressor
+    "KNN Regressor (k=5)": KNeighborsRegressor(n_neighbors=5),
+    
+    # Trees & Ensembles (No Scaling needed usually, but passing scaled is fine)
+    "Decision Tree Reg": DecisionTreeRegressor(max_depth=10, random_state=42),
+    "Random Forest Reg": RandomForestRegressor(n_estimators=50, max_depth=15, random_state=42, n_jobs=-1),
+    "XGBoost Regressor": XGBRegressor(n_estimators=100, max_depth=6, learning_rate=0.1, random_state=42, n_jobs=-1)
+}
+
+# 3 (Training Loop)
+
+reg_results = []
+
+for name, model in reg_models.items():
+    print(f"Training {name}...")
+    start_time = time.time()
+    
+ 
+    if name in ["Linear Regression", "Lasso (L1)", "Ridge (L2)", "Elastic Net", "KNN Regressor (k=5)"]:
+        model.fit(X_train_reg_s, y_train_reg)
+        y_pred = model.predict(X_val_reg_s)
+    else:
+        model.fit(X_train_reg, y_train_reg) # الشجريات لا تحتاج تحجيم
+        y_pred = model.predict(X_val_reg)
+        
+   
+    mae = mean_absolute_error(y_val_reg, y_pred)
+    mse = mean_squared_error(y_val_reg, y_pred)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(y_val_reg, y_pred)
+    elapsed = time.time() - start_time
+    
+    print(f"--> RMSE: {rmse:.4f}, MAE: {mae:.4f}, R2: {r2:.4f} ({elapsed:.2f}s)")
+    
+    reg_results.append({
+        "Model": name,
+        "RMSE": rmse,
+        "MAE": mae,
+        "R2 Score": r2,
+        "Time (s)": elapsed
+    })
+
+X_train_sub_s = X_train_reg_s[:10000]
+y_train_sub = y_train_reg.iloc[:10000]
+
+svr_models = [
+    ("SVR (Linear)", SVR(kernel='linear')),
+    ("SVR (RBF)", SVR(kernel='rbf'))
+]
+
+for name, model in svr_models:
+    start_time = time.time()
+    model.fit(X_train_sub_s, y_train_sub)
+    y_pred = model.predict(X_val_reg_s[:2000]) 
+    
+    rmse = np.sqrt(mean_squared_error(y_val_reg.iloc[:2000], y_pred))
+    mae = mean_absolute_error(y_val_reg.iloc[:2000], y_pred)
+    r2 = r2_score(y_val_reg.iloc[:2000], y_pred)
+    
+    print(f"--> {name} (Subset): RMSE: {rmse:.4f}, R2: {r2:.4f}")
+    reg_results.append({"Model": name + " (Subset)", "RMSE": rmse, "MAE": mae, "R2 Score": r2, "Time (s)": time.time() - start_time})
+
+#Stacked Regressor
+
+stack_reg = StackingRegressor(
+    estimators=[
+        ('rf', RandomForestRegressor(n_estimators=50, max_depth=10, random_state=42)),
+        ('xgb', XGBRegressor(n_estimators=50, max_depth=5, random_state=42))
+    ],
+    final_estimator=Ridge()
+)
+stack_reg.fit(X_train_reg, y_train_reg)
+y_pred_stack = stack_reg.predict(X_val_reg)
+
+rmse = np.sqrt(mean_squared_error(y_val_reg, y_pred_stack))
+r2 = r2_score(y_val_reg, y_pred_stack)
+reg_results.append({"Model": "Stacked Regressor", "RMSE": rmse, "MAE": mean_absolute_error(y_val_reg, y_pred_stack), "R2 Score": r2, "Time (s)": 0})
+print(f"--> Stacked RMSE: {rmse:.4f}")
+
+
+final_reg_df = pd.DataFrame(reg_results).sort_values(by="RMSE", ascending=True)
+print("\n=== Final Regression Results ===")
+print(final_reg_df)
+
+plt.figure(figsize=(10, 5))
+sns.barplot(x="RMSE", y="Model", data=final_reg_df, palette="magma")
+plt.title("Regression Models Comparison (RMSE - Lower is Better)")
+plt.show()
+
+best_model_name = final_reg_df.iloc[0]['Model']
+print(f"\nPlotting Residuals for best model: {best_model_name}")
+
+plt.figure(figsize=(8, 8))
+plt.scatter(y_val_reg, stack_reg.predict(X_val_reg), alpha=0.3, s=10)
+plt.plot([0, 30], [0, 30], 'r--') # خط المثالية
+plt.xlabel("Actual Days")
+plt.ylabel("Predicted Days")
+plt.title(f"Actual vs Predicted ({best_model_name})")
+plt.show()
+
+
+
+
+
+
+
+
+
 
 
 

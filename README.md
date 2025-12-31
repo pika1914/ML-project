@@ -685,13 +685,104 @@ plt.ylabel("Predicted Days")
 plt.title(f"Actual vs Predicted ({best_model_name})")
 plt.show()
 
+#Hyperparameter
+
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, TimeSeriesSplit
+from sklearn.metrics import make_scorer, f1_score
+
+tscv = TimeSeriesSplit(n_splits=3)
+print("Cross-Validation Strategy: TimeSeriesSplit (3 splits)")
+
+f1_scorer = make_scorer(f1_score)
+
+#XGBoost
+
+print("\nRunning RandomizedSearchCV for XGBoost (Boosting)...")
+
+xgb_params = {
+    'n_estimators': [100, 200],
+    'max_depth': [3, 6, 10],
+    'learning_rate': [0.01, 0.1, 0.2],
+    'subsample': [0.7, 0.9],
+    'colsample_bytree': [0.7, 0.9],
+    'scale_pos_weight': [1, 10] # للتعامل مع عدم التوازن
+}
+
+xgb_model = XGBClassifier(eval_metric='logloss', random_state=42, n_jobs=-1)
+
+xgb_search = RandomizedSearchCV(
+    estimator=xgb_model,
+    param_distributions=xgb_params,
+    n_iter=10, 
+    scoring=f1_scorer,
+    cv=tscv, 
+    verbose=1,
+    random_state=42,
+    n_jobs=-1
+)
+
+
+xgb_search.fit(X_train.iloc[:50000], y_train.iloc[:50000])
+
+print(f"Best XGBoost Params: {xgb_search.best_params_}")
+print(f"Best XGBoost F1 Score (CV): {xgb_search.best_score_:.4f}")
+
+
+#Random Forest
+
+rf_params = {
+    'n_estimators': [50, 100],
+    'max_depth': [10, 15],
+    'min_samples_split': [2, 5]
+}
+
+rf_model = RandomForestClassifier(class_weight='balanced', random_state=42, n_jobs=-1)
+
+rf_grid = GridSearchCV(
+    estimator=rf_model,
+    param_grid=rf_params,
+    scoring=f1_scorer,
+    cv=tscv, 
+    verbose=1,
+    n_jobs=-1
+)
+
+rf_grid.fit(X_train.iloc[:20000], y_train.iloc[:20000]) # عينة أصغر للسرعة
+
+print(f"Best Random Forest Params: {rf_grid.best_params_}")
+print(f"Best RF F1 Score (CV): {rf_grid.best_score_:.4f}")
 
 
 
+#Evaluation
+
+best_xgb = xgb_search.best_estimator_
+best_xgb.fit(X_train, y_train) 
+y_pred_xgb = best_xgb.predict(X_val)
+print(f"Tuned XGBoost F1 on Validation: {f1_score(y_val, y_pred_xgb):.4f}")
 
 
+best_rf = rf_grid.best_estimator_
+best_rf.fit(X_train, y_train)
+y_pred_rf = best_rf.predict(X_val)
+print(f"Tuned Random Forest F1 on Validation: {f1_score(y_val, y_pred_rf):.4f}")
 
 
+#Stacking
+
+print("\nBuilding Final Stacking Ensemble...")
+stacking_final = StackingClassifier(
+    estimators=[
+        ('tuned_xgb', best_xgb),
+        ('tuned_rf', best_rf)
+    ],
+    final_estimator=LogisticRegression(class_weight='balanced'),
+    cv=tscv
+)
+
+stacking_final.fit(X_train, y_train)
+y_pred_stack = stacking_final.predict(X_val)
+print(f"Final Stacking F1 Score: {f1_score(y_val, y_pred_stack):.4f}")
 
 
 
@@ -1032,7 +1123,7 @@ df_reg = df_reg.sort_values(by='RMSE', ascending=True)
 df_reg
 
 
-
+###############################################################################
 
 
 

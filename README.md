@@ -393,7 +393,7 @@ print(available_features[:10], "...")
 
 
 
-X_train = X_train_full[available_features].fillna(0) ى
+X_train = X_train_full[available_features].fillna(0)
 y_train = X_train_full[target_col]
 
 X_val = X_val_full[available_features].fillna(0)
@@ -768,6 +768,43 @@ y_pred_rf = best_rf.predict(X_val)
 print(f"Tuned Random Forest F1 on Validation: {f1_score(y_val, y_pred_rf):.4f}")
 
 
+
+#Decision Boundaries
+
+from sklearn.decomposition import PCA
+
+# 1. Reduce to 2D for visualization
+pca = PCA(n_components=2)
+X_vis = pca.fit_transform(X_val.iloc[:500]) # Take a sample
+y_vis = y_val.iloc[:500].values
+
+# 2. Train a simple model on 2D data for visualization purpose
+clf_vis = DecisionTreeClassifier(max_depth=5)
+clf_vis.fit(X_vis, y_vis)
+
+# 3. Create a meshgrid
+x_min, x_max = X_vis[:, 0].min() - 1, X_vis[:, 0].max() + 1
+y_min, y_max = X_vis[:, 1].min() - 1, X_vis[:, 1].max() + 1
+xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.1),
+                     np.arange(y_min, y_max, 0.1))
+
+# 4. Predict and Plot
+Z = clf_vis.predict(np.c_[xx.ravel(), yy.ravel()])
+Z = Z.reshape(xx.shape)
+
+plt.figure(figsize=(10, 6))
+plt.contourf(xx, yy, Z, alpha=0.4, cmap='viridis')
+plt.scatter(X_vis[:, 0], X_vis[:, 1], c=y_vis, s=20, edgecolor='k', cmap='viridis')
+plt.title("Decision Boundary (PCA Projection - Decision Tree)")
+plt.xlabel("PCA Component 1")
+plt.ylabel("PCA Component 2")
+plt.show()
+
+
+
+
+
+
 #Stacking
 
 print("\nBuilding Final Stacking Ensemble...")
@@ -869,6 +906,47 @@ ax4.set_ylabel('Fraction of Positives')
 ax4.legend()
 plt.show()
 
+#Interactive Plot
+
+print("=== Generating Interactive Dashboard ===")
+import ipywidgets as widgets
+from ipywidgets import interact
+
+def plot_interactive_metrics(threshold=0.5):
+ 
+    y_pred_adj = (y_prob >= threshold).astype(int)
+    
+  
+    cm = confusion_matrix(y_val, y_pred_adj)
+    
+ 
+    acc = accuracy_score(y_val, y_pred_adj)
+    f1 = f1_score(y_val, y_pred_adj)
+    
+   
+    plt.figure(figsize=(10, 4))
+    
+ 
+    plt.subplot(1, 2, 1)
+    sns.heatmap(cm, annot=True, fmt='d', cmap="Blues", cbar=False)
+    plt.title(f"Confusion Matrix (Threshold: {threshold:.2f})")
+    plt.xlabel('Predicted')
+    plt.ylabel('Actual')
+    
+   
+    plt.subplot(1, 2, 2)
+    plt.text(0.1, 0.6, f"Accuracy: {acc:.4f}", fontsize=15)
+    plt.text(0.1, 0.4, f"F1 Score: {f1:.4f}", fontsize=15)
+    plt.axis('off')
+    plt.title("Model Metrics")
+    
+    plt.tight_layout()
+    plt.show()
+
+
+print("Use the slider below to change the classification threshold:")
+interact(plot_interactive_metrics, threshold=(0.0, 1.0, 0.05));
+
 
 #Explainability with SHAP
 
@@ -898,7 +976,13 @@ X_val_noisy = X_val.copy()
 noise = np.random.normal(0, 5, size=len(X_val_noisy)) 
 X_val_noisy['days_since_prior_order'] = X_val_noisy['days_since_prior_order'] + noise
 
+print("Evaluating model on Noisy Data...")
+y_pred_noisy = final_model.predict(X_val_noisy)
+f1_noisy = f1_score(y_val, y_pred_noisy)
 
+print(f"Original F1 Score: {f1_score(y_val, y_pred):.4f}")
+print(f"Noisy F1 Score: {f1_noisy:.4f}")
+print(f"Performance Drop: {(f1_score(y_val, y_pred) - f1_noisy):.4f}")
 
 
 

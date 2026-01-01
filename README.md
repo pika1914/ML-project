@@ -1129,7 +1129,248 @@ df_reg
 
 
 
+from sklearn.metrics import roc_curve, auc, precision_recall_curve, average_precision_score, confusion_matrix, calibration_curve
+import matplotlib.pyplot as plt
+import seaborn as sns
 
+print("=== Generating Evaluation Plots ===")
+
+final_model = stacking_final  
+y_pred = final_model.predict(X_val)
+y_prob = final_model.predict_proba(X_val)[:, 1]
+
+# 1. ROC Curve & PR Curve
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+
+
+
+fpr, tpr, _ = roc_curve(y_val, y_prob)
+roc_auc = auc(fpr, tpr)
+ax1.plot(fpr, tpr, label=f'Stacking Model (AUC = {roc_auc:.2f})', color='darkorange')
+ax1.plot([0, 1], [0, 1], 'k--')
+ax1.set_title('ROC Curve')
+ax1.set_xlabel('False Positive Rate')
+ax1.set_ylabel('True Positive Rate')
+ax1.legend()
+
+
+# Precision-Recall
+precision, recall, _ = precision_recall_curve(y_val, y_prob)
+ap = average_precision_score(y_val, y_prob)
+ax2.plot(recall, precision, label=f'Stacking Model (AP = {ap:.2f})', color='purple')
+ax2.set_title('Precision-Recall Curve (Crucial for Imbalanced)')
+ax2.set_xlabel('Recall')
+ax2.set_ylabel('Precision')
+ax2.legend()
+plt.show()
+
+# 2. Confusion Matrix & Calibration
+fig, (ax3, ax4) = plt.subplots(1, 2, figsize=(16, 6))
+
+# Confusion Matrix
+cm = confusion_matrix(y_val, y_pred, normalize='true')
+sns.heatmap(cm, annot=True, fmt='.2f', cmap='Blues', ax=ax3)
+ax3.set_title('Normalized Confusion Matrix')
+
+# Calibration Curve
+prob_true, prob_pred = calibration_curve(y_val, y_prob, n_bins=10)
+ax4.plot(prob_pred, prob_true, marker='o', label='Stacking Classifier')
+ax4.plot([0, 1], [0, 1], linestyle='--', label='Perfectly Calibrated')
+ax4.set_title('Calibration Curve (Reliability Diagram)')
+ax4.set_xlabel('Mean Predicted Probability')
+ax4.set_ylabel('Fraction of Positives')
+ax4.legend()
+plt.show()
+
+
+#Explainability with SHAP
+
+import shap
+
+print("=== Generating SHAP Explanations ===")
+
+explainer = shap.TreeExplainer(best_xgb)
+
+X_shap_sample = X_val.sample(n=500, random_state=42)
+shap_values = explainer.shap_values(X_shap_sample)
+
+plt.figure(figsize=(10, 6))
+plt.title("SHAP Summary Plot")
+shap.summary_plot(shap_values, X_shap_sample, plot_type="bar")
+plt.show()
+
+plt.figure(figsize=(10, 6))
+shap.summary_plot(shap_values, X_shap_sample) # Dot plot
+plt.show()
+
+#Robustness & Stress Test
+
+print("=== Robustness Test: Adding Noise ===")
+
+X_val_noisy = X_val.copy()
+noise = np.random.normal(0, 5, size=len(X_val_noisy)) # انحراف معياري 5 أيام
+X_val_noisy['days_since_prior_order'] = X_val_noisy['days_since_prior_order'] + noise
+
+
+X_val_noisy = X_val.copy()
+noise = np.random.normal(0, 5, size=len(X_val_noisy)) # انحراف معياري 5 أيام
+X_val_noisy['days_since_prior_order'] = X_val_noisy['days_since_prior_order'] + noise
+
+
+
+#bouns
+
+
+!pip install onnx onnxmltools skl2onnx h2o -q
+
+import time
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import accuracy_score
+
+
+#Neural-based approach
+
+
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
+from tensorflow.keras.callbacks import EarlyStopping
+
+
+model_nn = Sequential([
+    Dense(128, input_dim=X_train.shape[1], activation='relu'),
+    BatchNormalization(),
+    Dropout(0.3), # دروب أوت بنسبة 30% لمنع الحفظ الصم (Overfitting)
+    
+    Dense(64, activation='relu'),
+    BatchNormalization(),
+    Dropout(0.2),
+    
+    Dense(32, activation='relu'),
+    Dense(1, activation='sigmoid') # Sigmoid لأن التصنيف ثنائي (0 أو 1)
+])
+
+model_nn.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+early_stop = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+
+print("Training Neural Network...")
+history = model_nn.fit(
+    X_train, y_train,
+    validation_data=(X_val, y_val),
+    epochs=50, # عدد الدورات الأقصى
+    batch_size=1024, # حجم الدفعة (كبير للسرعة)
+    callbacks=[early_stop],
+    verbose=1
+)
+
+
+plt.figure(figsize=(12, 5))
+
+
+plt.subplot(1, 2, 1)
+plt.plot(history.history['loss'], label='Train Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Loss Curve (Check for Overfitting)')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+
+
+plt.subplot(1, 2, 2)
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Accuracy Curve')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.show()
+
+
+loss_nn, acc_nn = model_nn.evaluate(X_val, y_val, verbose=0)
+print(f"Neural Network Accuracy: {acc_nn:.4f}")
+
+
+#Model Compression , Inference Speed
+
+
+from skl2onnx import convert_sklearn
+from skl2onnx.common.data_types import FloatTensorType
+import onnxruntime as rt
+
+
+if 'best_rf' not in locals():
+    print("Warning: 'best_rf' not found, training a small RF for demo...")
+    best_rf = RandomForestClassifier(n_estimators=10, max_depth=5).fit(X_train, y_train)
+
+
+initial_type = [('float_input', FloatTensorType([None, X_train.shape[1]]))]
+onnx_model = convert_sklearn(best_rf, initial_types=initial_type)
+
+with open("rf_model.onnx", "wb") as f:
+    f.write(onnx_model.SerializeToString())
+print("Model saved as 'rf_model.onnx'")
+
+
+sample_input = X_val.iloc[0:1].values.astype(np.float32)
+
+
+start = time.time()
+for _ in range(1000):
+    best_rf.predict(sample_input)
+sklearn_time = (time.time() - start) / 1000
+print(f"Sklearn Latency: {sklearn_time * 1000:.4f} ms per sample")
+
+
+sess = rt.InferenceSession("rf_model.onnx", providers=['CPUExecutionProvider'])
+input_name = sess.get_inputs()[0].name
+label_name = sess.get_outputs()[0].name
+
+start = time.time()
+for _ in range(1000):
+    sess.run([label_name], {input_name: sample_input})
+onnx_time = (time.time() - start) / 1000
+print(f"ONNX Latency:    {onnx_time * 1000:.4f} ms per sample")
+
+print(f"Speedup: {sklearn_time / onnx_time:.2f}x faster with ONNX")
+
+
+
+#AutoML
+
+import h2o
+from h2o.automl import H2OAutoML
+
+# 1. تهيئة H2O Cluster
+h2o.init(max_mem_size='2G')
+
+train_h2o = h2o.H2OFrame(pd.concat([X_train.iloc[:10000], y_train.iloc[:10000]], axis=1))
+test_h2o = h2o.H2OFrame(pd.concat([X_val.iloc[:2000], y_val.iloc[:2000]], axis=1))
+
+target_col_h2o = 'reordered'
+feature_cols_h2o = [c for c in train_h2o.columns if c != target_col_h2o]
+
+
+train_h2o[target_col_h2o] = train_h2o[target_col_h2o].asfactor()
+test_h2o[target_col_h2o] = test_h2o[target_col_h2o].asfactor()
+
+print("Running H2O AutoML (Limit: 5 models or 60 seconds)...")
+aml = H2OAutoML(max_models=5, max_runtime_secs=120, seed=42, project_name="Instacart_Bonus")
+aml.train(x=feature_cols_h2o, y=target_col_h2o, training_frame=train_h2o)
+
+
+lb = aml.leaderboard
+print("\nAutoML Leaderboard:")
+print(lb.head(rows=10))
+
+
+print(f"\nBest AutoML Model: {aml.leader.model_id}")
+perf = aml.leader.model_performance(test_h2o)
+print("AutoML Performance on Test Set:")
+print(perf)
 
 
 

@@ -12,7 +12,7 @@ from sklearn.impute import SimpleImputer
 import glob
 import os
 path = '/content/drive/MyDrive/ML/*.csv'
-df = dd.read_csv(path)
+data_fram = dd.read_csv(path)
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -23,36 +23,41 @@ from sklearn.metrics import accuracy_score, classification_report
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, MinMaxScaler
 from sklearn.model_selection import KFold
 
+#memory_optimaiz
+
 sns.set_style("whitegrid")
 plt.rcParams['figure.figsize'] = (12, 6)
 
-def reduce_mem_usage(df):
-    start_mem = df.memory_usage().sum() / 1024**2
+def reduce_mem_usage(data_fram):
+    start_mem = data_fram.memory_usage().sum() / 1024**2
     print(f'Initial Memory: {start_mem:.2f} MB')
-    
-    for col in df.columns:
-        col_type = df[col].dtype
+
+    for col in data_fram.columns:
+        col_type = data_fram[col].dtype
+
         if col_type != object:
-            c_min = df[col].min()
-            c_max = df[col].max()
+            c_min = data_fram[col].min()
+            c_max = data_fram[col].max()
+            
             if str(col_type)[:3] == 'int':
                 if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
-                    df[col] = df[col].astype(np.int8)
+                    data_fram[col] = data_fram[col].astype(np.int8)
                 elif c_min > np.iinfo(np.int16).min and c_max < np.iinfo(np.int16).max:
-                    df[col] = df[col].astype(np.int16)
+                    data_fram[col] = data_fram[col].astype(np.int16)
                 elif c_min > np.iinfo(np.int32).min and c_max < np.iinfo(np.int32).max:
-                    df[col] = df[col].astype(np.int32)
+                    data_fram[col] = data_fram[col].astype(np.int32)
             else:
                 if c_min > np.finfo(np.float32).min and c_max < np.finfo(np.float32).max:
-                    df[col] = df[col].astype(np.float32)
+                    data_fram[col] = data_fram[col].astype(np.float32)
                 else:
-                    df[col] = df[col].astype(np.float64)
+                    data_fram[col] = data_fram[col].astype(np.float64)
         else:
-            df[col] = df[col].astype('category')
+            data_fram[col] = data_fram[col].astype('category')
 
-    end_mem = df.memory_usage().sum() / 1024**2
+    end_mem = data_fram.memory_usage().sum() / 1024**2
     print(f'Final Memory: {end_mem:.2f} MB')
-    return df
+    
+    return data_fram
 
 
 
@@ -65,23 +70,24 @@ departments = reduce_mem_usage(pd.read_csv(path + 'departments.csv'))
 order_products = reduce_mem_usage(pd.read_csv(path + 'order_products__train.csv'))
 aisles = reduce_mem_usage(pd.read_csv(path + 'aisles.csv'))
 
+#merg data
 
-print("Merging Data...")
+print("Merging Data ")
 
 
-df = pd.merge(order_products, orders, on='order_id', how='left')
+data_fram = pd.merge(order_products, orders, on='order_id', how='left')
 
-df = pd.merge(df, products, on='product_id', how='left')
+data_fram = pd.merge(data_fram, products, on='product_id', how='left')
 
-df = pd.merge(df, departments, on='department_id', how='left')
+data_fram = pd.merge(data_fram, departments, on='department_id', how='left')
 
 
 del orders, products, departments, order_products, aisles
 gc.collect()
 
-print("Data Loaded and Merged Successfully.")
+print("Data Loaded and Merged ")
 plt.figure(figsize=(10, 5))
-sns.histplot(df['days_since_prior_order'], bins=30, kde=False, color='skyblue')
+sns.histplot(data_fram['days_since_prior_order'], bins=30, kde=False, color='skyblue')
 plt.title('Distribution of Days Since Prior Order')
 plt.xlabel('Days')
 plt.ylabel('Count')
@@ -89,8 +95,8 @@ plt.show()
 
 #Missing Value Analysis
 
-missing_values = df.isnull().sum()
-missing_percent = (missing_values / len(df)) * 100
+missing_values = data_fram.isnull().sum()
+missing_percent = (missing_values / len(data_fram)) * 100
 print("\nMissing Values:\n", missing_values[missing_values > 0])
 
 plt.figure(figsize=(8, 4))
@@ -101,13 +107,13 @@ plt.xticks(rotation=45)
 plt.show()
 
 plt.figure(figsize=(10, 5))
-sns.histplot(df['days_since_prior_order'].dropna(), bins=30, kde=True, color='teal')
+sns.histplot(data_fram['days_since_prior_order'].dropna(), bins=30, kde=True, color='teal')
 plt.title('Distribution of Days Since Prior Order')
 plt.xlabel('Days')
 plt.show()
 
 
-top_depts = df['department'].value_counts().head(10)
+top_depts = data_fram['department'].value_counts().head(10)
 plt.figure(figsize=(12, 5))
 sns.barplot(x=top_depts.index, y=top_depts.values, palette='viridis')
 plt.title('Top 10 Best Selling Departments (Cardinality Analysis)')
@@ -115,21 +121,20 @@ plt.xticks(rotation=45)
 plt.show()
 
 
-sample_heatmap = df.sample(n=min(100000, len(df)), random_state=42)
+sample_heatmap = data_fram.sample(n=min(100000, len(data_fram)), random_state=42)
 heatmap_data = sample_heatmap.groupby(['order_dow', 'order_hour_of_day']).size().unstack()
 
 
 plt.figure(figsize=(12, 6))
 sns.heatmap(heatmap_data, cmap="YlGnBu", annot=False)
-plt.title("Seasonality Heatmap: Order Volume by Day & Hour")
+plt.title("Seasonality Heatmap: Order Volume by Day and Hour")
 plt.xlabel('Hour of Day')
 plt.ylabel('Day of Week')
 plt.show()
 
 
-numeric_cols = ['order_number', 'order_dow', 'order_hour_of_day', 
-                'days_since_prior_order', 'add_to_cart_order', 'reordered']
-corr_matrix = df[numeric_cols].corr()
+numeric_cols = ['order_number', 'order_dow', 'order_hour_of_day', 'days_since_prior_order', 'add_to_cart_order', 'reordered']
+corr_matrix = data_fram[numeric_cols].corr()
 
 plt.figure(figsize=(10, 8))
 sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt=".2f")
@@ -137,249 +142,222 @@ plt.title("Correlation Matrix for Numeric Features")
 plt.show()
 
 
-print("\nImputing Missing Values...")
-df['days_since_prior_order'] = df['days_since_prior_order'].fillna(-1)
-print(f"Missing values in 'days_since_prior_order' after imputation: {df['days_since_prior_order'].isnull().sum()}")
+print("\nImputing Missing Values ")
+data_fram['days_since_prior_order'] = data_fram['days_since_prior_order'].fillna(-1)
+print(f"Missing values in 'days_since_prior_order' after imputation: {data_fram['days_since_prior_order'].isnull().sum()}")
 
 
 plt.figure(figsize=(10, 2))
-sns.boxplot(x=df['add_to_cart_order'])
+sns.boxplot(x=data_fram['add_to_cart_order'])
 plt.title("Boxplot: Add to Cart Order (Before Winsorizing)")
 plt.show()
 
 
 
 
-upper_limit = df['add_to_cart_order'].quantile(0.99)
+upper_limit = data_fram['add_to_cart_order'].quantile(0.99)
 print(f"Capping outliers for 'add_to_cart_order' at 99th percentile: {upper_limit}")
 
-df.loc[df['add_to_cart_order'] > upper_limit, 'add_to_cart_order'] = upper_limit
+data_fram.loc[data_fram['add_to_cart_order'] > upper_limit, 'add_to_cart_order'] = upper_limit
 
 plt.figure(figsize=(10, 2))
-sns.boxplot(x=df['add_to_cart_order'])
+sns.boxplot(x=data_fram['add_to_cart_order'])
 plt.title("Boxplot: Add to Cart Order (After Winsorizing)")
 plt.show()
 
-print("\nStep 1 (Ingestion), Step 2 (EDA), and Step 3 (Cleaning) Completed Successfully!")
+print("\nFinished loading, exploring and cleaning the data.")
 
 #4_Encoding Categorical Variables
 
 
-if 'reordered' not in df.columns:
+if 'reordered' not in data_fram.columns:
     print("Warning: 'reordered' column not found. Ensure 'order_products' is merged correctly.")
 else:
-    print("Target variable 'reordered' found. Proceeding with Encoding...")
+    print("Target variable 'reordered' found. Proceeding with Encoding ")
 
-print("Applying One-Hot Encoding on 'department'...")
+print("One-Hot Encoding in department")
 
-df = pd.get_dummies(df, columns=['department'], prefix='dept', drop_first=True)
+data_fram = pd.get_dummies(data_fram, columns=['department'], prefix='dept', drop_first=True)
 
-print(f"New columns created: {[col for col in df.columns if 'dept_' in col][:5]} ...")
+print(f"New columns created: {[col for col in data_fram.columns if 'dept_' in col][:5]}  ")
 
-print("Applying Frequency Encoding on 'product_id'...")
+print("Encoding product_id")
 
-product_freq = df['product_id'].value_counts(normalize=True)
+product_freq = data_fram['product_id'].value_counts(normalize=True)
 
-df['product_freq_enc'] = df['product_id'].map(product_freq)
+data_fram['product_freq_enc'] = data_fram['product_id'].map(product_freq)
 
-print("Applying Target Encoding with K-Fold on 'aisle_id'...")
+print("Encoding aisle feature")
 
 kf = KFold(n_splits=5, shuffle=True, random_state=42)
 
-df['aisle_target_enc'] = np.nan
+data_fram['aisle_target_enc'] = np.nan
 
-for train_index, val_index in kf.split(df):
+for train_index, val_index in kf.split(data_fram):
 
-  X_train, X_val = df.iloc[train_index], df.iloc[val_index]
+  X_train, X_val = data_fram.iloc[train_index], data_fram.iloc[val_index]
 
   means = X_train.groupby('aisle_id')['reordered'].mean()
 
-  df.loc[val_index, 'aisle_target_enc'] = X_val['aisle_id'].map(means)
+  data_fram.loc[val_index, 'aisle_target_enc'] = X_val['aisle_id'].map(means)
 
-global_mean = df['reordered'].mean()
-df['aisle_target_enc'] = df['aisle_target_enc'].fillna(global_mean)
+global_mean = data_fram['reordered'].mean()
+data_fram['aisle_target_enc'] = data_fram['aisle_target_enc'].fillna(global_mean)
 
 print("\nComparing Encoding Impact (Correlation with Target 'reordered'):")
 
-encoding_cols = ['product_freq_enc', 'aisle_target_enc']
+enc_features = ['product_freq_enc', 'aisle_target_enc']
 
-dept_col = [col for col in df.columns if 'dept_' in col][0]
-encoding_cols.append(dept_col)
+dept_col = [col for col in data_fram.columns if 'dept_' in col][0]
+enc_features.append(dept_col)
 
 
-correlations = df[encoding_cols + ['reordered']].corr()['reordered'].drop('reordered')
+correlations = data_fram[enc_features + ['reordered']].corr()['reordered'].drop('reordered')
 print(correlations.sort_values(ascending=False))
 
-print("\nEncoding Step Completed Successfully.")
-print(df[['product_id', 'product_freq_enc', 'aisle_id', 'aisle_target_enc', 'reordered']].head())
+print("\nEncoding Step Completed")
+print(data_fram[['product_id', 'product_freq_enc', 'aisle_id', 'aisle_target_enc', 'reordered']].head())
 
 
-# 5. Feature Engineering (MANDATORY LIST)
+# 5_Feature_Engineering
 
 orders_meta = pd.read_csv(path + 'orders.csv', usecols=['user_id', 'order_number', 'days_since_prior_order'])
 
 user_stats = orders_meta.groupby('user_id').agg({'order_number': 'max', 'days_since_prior_order': 'mean' }).rename(columns={'order_number': 'user_total_orders','days_since_prior_order': 'user_avg_days_between_orders'})
 
-user_basket_stats = df.groupby('user_id').agg({ 'reordered': 'mean','product_id': 'count' }).rename(columns={ 'reordered': 'user_reorder_ratio', 'product_id': 'avg_basket_size'})
+user_basket_stats = data_fram.groupby('user_id').agg({ 'reordered': 'mean','product_id': 'count' }).rename(columns={ 'reordered': 'user_reorder_ratio', 'product_id': 'avg_basket_size'})
 
-df = df.merge(user_stats, on='user_id', how='left')
-df = df.merge(user_basket_stats, on='user_id', how='left')
+data_fram = data_fram.merge(user_stats, on='user_id', how='left')
+data_fram = data_fram.merge(user_basket_stats, on='user_id', how='left')
 
 del orders_meta, user_stats, user_basket_stats
 gc.collect()
 print("User features created.")
 
-product_stats = df.groupby('product_id').agg({
-    'reordered': 'mean', 
-    'add_to_cart_order': 'mean', 
-    'order_id': 'count' 
-}).rename(columns={
-    'reordered': 'prod_reorder_rate',
-    'add_to_cart_order': 'prod_avg_position',
-    'order_id': 'prod_popularity'
-})
+product_stats = data_fram.groupby('product_id').agg({'reordered': 'mean', 'add_to_cart_order': 'mean', 'order_id': 'count' }).rename(columns={'reordered': 'prod_reorder_rate','add_to_cart_order': 'prod_avg_position','order_id': 'prod_popularity'})
 
-
-df = df.merge(product_stats, on='product_id', how='left')
+data_fram = data_fram.merge(product_stats, on='product_id', how='left')
 del product_stats
 gc.collect()
 print("Product features created.")
 
-user_prod_stats = df.groupby(['user_id', 'product_id']).agg({
-    'order_id': 'count', 
-    'reordered': 'mean' 
-}).rename(columns={
-    'order_id': 'up_purchase_count',
-    'reordered': 'up_reorder_prob'
-})
+user_prod_stats = data_fram.groupby(['user_id', 'product_id']).agg({'order_id': 'count', 'reordered': 'mean' }).rename(columns={'order_id': 'up_purchase_count','reordered': 'up_reorder_prob'})
 
-
-df = df.merge(user_prod_stats, on=['user_id', 'product_id'], how='left')
+data_fram = data_fram.merge(user_prod_stats, on=['user_id', 'product_id'], how='left')
 del user_prod_stats
 gc.collect()
 print("User-Product interaction features created.")
 
 
-df['hour_sin'] = np.sin(2 * np.pi * df['order_hour_of_day'] / 24)
-df['hour_cos'] = np.cos(2 * np.pi * df['order_hour_of_day'] / 24)
+data_fram['hour_sin'] = np.sin(2 * np.pi * data_fram['order_hour_of_day'] / 24)
+data_fram['hour_cos'] = np.cos(2 * np.pi * data_fram['order_hour_of_day'] / 24)
 
-df['is_weekend'] = df['order_dow'].isin([0, 1]).astype(int)
+data_fram['is_weekend'] = data_fram['order_dow'].isin([0, 1]).astype(int)
 
-df['interaction_popularity_loyalty'] = np.log1p(df['prod_popularity']) * df['user_total_orders']
+data_fram['interaction_popularity_loyalty'] = np.log1p(data_fram['prod_popularity']) * data_fram['user_total_orders']
 
 
-print("\nStarting Feature Scaling...")
+print("\nStarting Feature Scaling ")
 from sklearn.preprocessing import StandardScaler
 
-scale_cols = [
-    'user_total_orders', 'user_avg_days_between_orders', 'user_reorder_ratio', 'avg_basket_size',
-    'prod_reorder_rate', 'prod_avg_position', 'prod_popularity',
-    'up_purchase_count', 'up_reorder_prob',
-    'days_since_prior_order', 'interaction_popularity_loyalty'
-]
+scale_cols = ['user_total_orders', 'user_avg_days_between_orders', 'user_reorder_ratio', 'avg_basket_size','prod_reorder_rate', 'prod_avg_position', 'prod_popularity','up_purchase_count', 'up_reorder_prob','days_since_prior_order', 'interaction_popularity_loyalty']
 
 for col in scale_cols:
-    df[col] = df[col].fillna(df[col].mean())
+    data_fram[col] = data_fram[col].fillna(data_fram[col].mean())
 
 scaler = StandardScaler()
 
-scaled_features = scaler.fit_transform(df[scale_cols])
-df_scaled = pd.DataFrame(scaled_features, columns=[f'scl_{c}' for c in scale_cols], index=df.index)
+scaled_features = scaler.fit_transform(data_fram[scale_cols])
+data_fram_scaled = pd.DataFrame(scaled_features, columns=[f'scl_{c}' for c in scale_cols], index=data_fram.index)
 
 
-df = pd.concat([df, df_scaled], axis=1)
+data_fram = pd.concat([data_fram, data_fram_scaled], axis=1)
 
-print("Feature Engineering & Scaling Completed Successfully.")
-print(f"New Scaled Columns: {df_scaled.columns.tolist()}")
-print(df.head())
+print("Feature Engineering and Scaling ")
+print(f"New Scaled Columns: {data_fram_scaled.columns.tolist()}")
+print(data_fram.head())
 
-# 6. Advanced Feature Engineering
+#6_Advanced Feature Engineering
 
-if 'prod_popularity' in df.columns and 'user_total_orders' in df.columns:
-    df['interaction_user_prod_rank'] = df['prod_popularity'] * df['user_total_orders']
+if 'prod_popularity' in data_fram.columns and 'user_total_orders' in data_fram.columns:
+    data_fram['interaction_user_prod_rank'] = data_fram['prod_popularity'] * data_fram['user_total_orders']
 
-df['log_days_since_prior'] = np.log1p(df['days_since_prior_order'])
+data_fram['log_days_since_prior'] = np.log1p(data_fram['days_since_prior_order'])
 
 
-df['user_order_frequency'] = df['user_total_orders'] / (df['user_avg_days_between_orders'] + 1)
+data_fram['user_order_frequency'] = data_fram['user_total_orders'] / (data_fram['user_avg_days_between_orders'] + 1)
 
-print("Advanced features created: ['interaction_user_prod_rank', 'log_days_since_prior', 'user_order_frequency']")
+print("some extra features ")
 
-# 7. Dimensionality & Multicollinearity (VIF)
+#_7_Dimensionality and Multicollinearity
 
-print("\n=== Step 7: Multicollinearity Check (VIF) ===")
+print("Checking multicollinearity between some numeric features")
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 
-numeric_feats = ['user_total_orders', 'user_avg_days_between_orders', 
-                 'avg_basket_size', 'days_since_prior_order', 
-                 'prod_reorder_rate', 'user_reorder_ratio']
+numeric_feats = ['user_total_orders', 'user_avg_days_between_orders', 'avg_basket_size', 'days_since_prior_order', 'prod_reorder_rate', 'user_reorder_ratio']
 
 
-X_vif = df[numeric_feats].fillna(df[numeric_feats].mean())
+X_vif = data_fram[numeric_feats].fillna(data_fram[numeric_feats].mean())
 
 X_vif_sample = X_vif.sample(n=10000, random_state=42)
 
 
 vif_data = pd.DataFrame()
 vif_data["Feature"] = numeric_feats
-vif_data["VIF"] = [variance_inflation_factor(X_vif_sample.values, i) 
-                   for i in range(len(numeric_feats))]
+vif_data["VIF"] = [variance_inflation_factor(X_vif_sample.values, i) for i in range(len(numeric_feats))]
 
 print(vif_data.sort_values(by="VIF", ascending=False))
 print("\nNote: VIF > 5 or 10 indicates high multicollinearity. Consider removing these features.")
 
 
 
-# 8. Imbalanced Data Handling
+# 8 _ Imbalanced Data Handling
 
 
-target_count = df['reordered'].value_counts()
+target_count = data_fram['reordered'].value_counts()
 print("Class Distribution:\n", target_count)
 print("Ratio (0:1):", target_count[0] / target_count[1])
 
 plt.figure(figsize=(6, 4))
-sns.countplot(x='reordered', data=df, palette='pastel')
+sns.countplot(x='reordered', data=data_fram, palette='pastel')
 plt.title('Target Class Distribution (Imbalanced)')
 plt.show()
 
 
 
 from sklearn.utils.class_weight import compute_class_weight
-class_weights = compute_class_weight(class_weight='balanced', 
-                                     classes=np.unique(df['reordered']), 
-                                     y=df['reordered'])
-class_weight_dict = dict(zip(np.unique(df['reordered']), class_weights))
+class_weights = compute_class_weight(class_weight='balanced', classes=np.unique(data_fram['reordered']),y=data_fram['reordered'])
+class_weight_dict = dict(zip(np.unique(data_fram['reordered']), class_weights))
 print("Computed Class Weights:", class_weight_dict)
 
 
 from imblearn.over_sampling import SMOTE
 smote = SMOTE(random_state=42)
-print("SMOTE object initialized (Apply strictly within training loop/pipeline to avoid leakage).")
+print("SMOTE initialized use to avoid data leakage)")
 
 
 
-# 9. Time-Aware Splitting
+#9_Time_Aware_Splitting
 
 
-unique_users = df['user_id'].unique()
+unique_users = data_fram['user_id'].unique()
 train_users, val_users = train_test_split(unique_users, test_size=0.2, random_state=42)
 
 print(f"Total Users: {len(unique_users)}")
 print(f"Train Users: {len(train_users)}")
 print(f"Validation Users: {len(val_users)}")
 
-X_train_full = df[df['user_id'].isin(train_users)]
+X_train_full = data_fram[data_fram['user_id'].isin(train_users)]
 
 
-X_val_full = df[df['user_id'].isin(val_users)]
+X_val_full = data_fram[data_fram['user_id'].isin(val_users)]
 
 print(f"Train Set Shape: {X_train_full.shape}")
 print(f"Validation Set Shape: {X_val_full.shape}")
 
 
-features_to_drop = ['order_id', 'user_id', 'product_id', 'eval_set', 
-                    'product_name', 'department', 'aisle'] 
+features_to_drop = ['order_id', 'user_id', 'product_id', 'eval_set', 'product_name', 'department', 'aisle'] 
 target_col = 'reordered'
 
 
@@ -387,7 +365,7 @@ target_col = 'reordered'
 available_features = [c for c in X_train_full.columns if c not in features_to_drop and c != target_col]
 
 print(f"\nFinal Features List ({len(available_features)}):")
-print(available_features[:10], "...")
+print(available_features[:10])
 
 
 
@@ -402,7 +380,7 @@ y_val = X_val_full[target_col]
 print("\nData Splits Ready for Modeling.")
 
 
-# Task A: Classification
+#task A Classification
 
 import time
 from sklearn.pipeline import make_pipeline
@@ -417,47 +395,22 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, classificat
 
 models = {
     # Logistic Regression: L2 penalty (Ridge) default, Class Weighted
-    "Logistic Regression": make_pipeline(
-        StandardScaler(),
-        LogisticRegression(penalty='l2', C=1.0, class_weight='balanced', solver='lbfgs', max_iter=1000, random_state=42)
-    ),
+    "Logistic Regression": make_pipeline(StandardScaler(),LogisticRegression(penalty='l2', C=1.0, class_weight='balanced', solver='lbfgs', max_iter=1000, random_state=42)),
     
     
     "KNN (k=5)": make_pipeline(
         StandardScaler(),
-        KNeighborsClassifier(n_neighbors=5)
-    ),
-    
-    
-    "Decision Tree": DecisionTreeClassifier(max_depth=10, class_weight='balanced', random_state=42),
-    
-    
-    "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=15, class_weight='balanced', random_state=42, n_jobs=-1),
-    
-    
-    "XGBoost": XGBClassifier(
-        n_estimators=100, 
-        max_depth=6, 
-        learning_rate=0.1, 
-        eval_metric='logloss',
-        scale_pos_weight=10, 
-        random_state=42, 
-        n_jobs=-1
-    )
-}
+        KNeighborsClassifier(n_neighbors=5)),"Decision Tree": DecisionTreeClassifier(max_depth=10, class_weight='balanced', random_state=42), "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=15, class_weight='balanced', random_state=42, n_jobs=-1), "XGBoost": XGBClassifier(n_estimators=100, max_depth=6, learning_rate=0.1, eval_metric='logloss',scale_pos_weight=10, random_state=42, n_jobs=-1)}
 
 
 
-svm_model = make_pipeline(
-    StandardScaler(),
-    SVC(kernel='rbf', C=1.0, probability=True, class_weight='balanced', random_state=42)
-)
+svm_model = make_pipeline(StandardScaler(),SVC(kernel='rbf', C=1.0, probability=True, class_weight='balanced', random_state=42))
 
 
-results_df = []
+model_results = []
 
 for name, model in models.items():
-    print(f"\nTraining {name}...")
+    print(f"\nTraining {name} ")
     start_time = time.time()
     
   
@@ -473,23 +426,14 @@ for name, model in models.items():
     auc = roc_auc_score(y_val, y_prob)
     elapsed = time.time() - start_time
     
-    print(f"--> Done. Accuracy: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f} ({elapsed:.2f}s)")
+    print(f"Model: {name} | Accuracy: {acc:.3f} | F1 Score: {f1:.3f}")
     
-    results_df.append({
-        "Model": name,
-        "Accuracy": acc,
-        "F1-Score": f1,
-        "AUC-ROC": auc,
-        "Time (s)": elapsed
-    })
+    model_results.append({"Model": name,"Accuracy": acc,"F1-Score": f1,"AUC-ROC": auc,"Time (s)": elapsed})
 
 X_train_sub = X_train.iloc[:20000]
 y_train_sub = y_train.iloc[:20000]
 
-svm_configs = [
-    ("SVM (Linear)", SVC(kernel='linear', probability=True, class_weight='balanced', random_state=42)),
-    ("SVM (RBF)", SVC(kernel='rbf', probability=True, class_weight='balanced', random_state=42))
-]
+svm_configs = [("SVM (Linear)", SVC(kernel='linear', probability=True, class_weight='balanced', random_state=42)),("SVM (RBF)", SVC(kernel='rbf', probability=True, class_weight='balanced', random_state=42))]
 
 
 for name, clf in svm_configs:
@@ -505,19 +449,12 @@ for name, clf in svm_configs:
     auc = roc_auc_score(y_val, y_prob)
     elapsed = time.time() - start_time
     
-    print(f"--> {name} Done (Subset Train). Acc: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
-    results_df.append({"Model": name + " (Subset)", "Accuracy": acc, "F1-Score": f1, "AUC-ROC": auc, "Time (s)": elapsed})
+    print(f" {name} Done (Subset Train). Acc: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
+    model_results.append({"Model": name + " (Subset)", "Accuracy": acc, "F1-Score": f1, "AUC-ROC": auc, "Time (s)": elapsed})
 
 
-estimators = [
-    ('rf', RandomForestClassifier(n_estimators=50, max_depth=10, random_state=42)),
-    ('xgb', XGBClassifier(n_estimators=50, max_depth=5, eval_metric='logloss', random_state=42))
-]
-stacking_clf = StackingClassifier(
-    estimators=estimators,
-    final_estimator=LogisticRegression(),
-    cv=3 
-)
+estimators = [('rf', RandomForestClassifier(n_estimators=50, max_depth=10, random_state=42)),('xgb', XGBClassifier(n_estimators=50, max_depth=5, eval_metric='logloss', random_state=42))]
+stacking_clf = StackingClassifier(estimators=estimators,final_estimator=LogisticRegression(),cv=3 )
 
 start_time = time.time()
 stacking_clf.fit(X_train, y_train)
@@ -529,13 +466,13 @@ f1 = f1_score(y_val, y_pred_stack)
 auc = roc_auc_score(y_val, y_prob_stack)
 elapsed = time.time() - start_time
 
-print(f"--> Stacking Done. Acc: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
-results_df.append({"Model": "Stacking Classifier", "Accuracy": acc, "F1-Score": f1, "AUC-ROC": auc, "Time (s)": elapsed})
+print(f"Stacking Done. Acc: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
+model_results.append({"Model": "Stacking Classifier", "Accuracy": acc, "F1-Score": f1, "AUC-ROC": auc, "Time (s)": elapsed})
 
 
-print("\n=== Final Model Comparison ===")
-final_results = pd.DataFrame(results_df).sort_values(by="AUC-ROC", ascending=False)
-print(final_results)
+print("Model comparison results")
+final_results = pd.DataFrame(model_results).sort_values(by="AUC-ROC", ascending=False)
+print(final_results[['Model', 'AUC-ROC']])
 
 
 plt.figure(figsize=(10, 5))
@@ -554,7 +491,7 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, S
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-df_reg = df[df['days_since_prior_order'] >= 0].copy()
+data_fram_reg = data_fram[data_fram['days_since_prior_order'] >= 0].copy()
 
 target_reg = 'days_since_prior_order'
 
@@ -562,16 +499,16 @@ target_reg = 'days_since_prior_order'
 drop_cols_reg = [target_reg, 'log_days_since_prior', 'order_id', 'user_id', 
                  'product_id', 'eval_set', 'product_name', 'department', 'aisle']
 
-features_reg = [c for c in df_reg.columns if c not in drop_cols_reg]
+features_reg = [c for c in data_fram_reg.columns if c not in drop_cols_reg]
 print(f"Regression Features ({len(features_reg)}): {features_reg}")
 
-train_users_reg, val_users_reg = train_test_split(df_reg['user_id'].unique(), test_size=0.2, random_state=42)
+train_users_reg, val_users_reg = train_test_split(data_fram_reg['user_id'].unique(), test_size=0.2, random_state=42)
 
-X_train_reg = df_reg[df_reg['user_id'].isin(train_users_reg)][features_reg].fillna(0)
-y_train_reg = df_reg[df_reg['user_id'].isin(train_users_reg)][target_reg]
+X_train_reg = data_fram_reg[data_fram_reg['user_id'].isin(train_users_reg)][features_reg].fillna(0)
+y_train_reg = data_fram_reg[data_fram_reg['user_id'].isin(train_users_reg)][target_reg]
 
-X_val_reg = df_reg[df_reg['user_id'].isin(val_users_reg)][features_reg].fillna(0)
-y_val_reg = df_reg[df_reg['user_id'].isin(val_users_reg)][target_reg]
+X_val_reg = data_fram_reg[data_fram_reg['user_id'].isin(val_users_reg)][features_reg].fillna(0)
+y_val_reg = data_fram_reg[data_fram_reg['user_id'].isin(val_users_reg)][target_reg]
 
 
 scaler_reg = StandardScaler()
@@ -579,7 +516,7 @@ X_train_reg_s = scaler_reg.fit_transform(X_train_reg)
 X_val_reg_s = scaler_reg.transform(X_val_reg)
 
 reg_models = {
-    # Ordinary Least Squares & Regularized Variants
+    # Ordinary Least Squares and Regularized Variants
     "Linear Regression": LinearRegression(),
     "Lasso (L1)": Lasso(alpha=0.1, random_state=42),
     "Ridge (L2)": Ridge(alpha=1.0, random_state=42),
@@ -588,7 +525,7 @@ reg_models = {
     # KNN Regressor
     "KNN Regressor (k=5)": KNeighborsRegressor(n_neighbors=5),
     
-    # Trees & Ensembles (No Scaling needed usually, but passing scaled is fine)
+    # Trees and Ensembles (No Scaling needed usually, but passing scaled is fine)
     "Decision Tree Reg": DecisionTreeRegressor(max_depth=10, random_state=42),
     "Random Forest Reg": RandomForestRegressor(n_estimators=50, max_depth=15, random_state=42, n_jobs=-1),
     "XGBoost Regressor": XGBRegressor(n_estimators=100, max_depth=6, learning_rate=0.1, random_state=42, n_jobs=-1)
@@ -599,7 +536,7 @@ reg_models = {
 reg_results = []
 
 for name, model in reg_models.items():
-    print(f"Training {name}...")
+    print(f"Training {name} ")
     start_time = time.time()
     
  
@@ -665,16 +602,16 @@ reg_results.append({"Model": "Stacked Regressor", "RMSE": rmse, "MAE": mean_abso
 print(f"--> Stacked RMSE: {rmse:.4f}")
 
 
-final_reg_df = pd.DataFrame(reg_results).sort_values(by="RMSE", ascending=True)
+final_reg_data_fram = pd.DataFrame(reg_results).sort_values(by="RMSE", ascending=True)
 print("\n=== Final Regression Results ===")
-print(final_reg_df)
+print(final_reg_data_fram)
 
 plt.figure(figsize=(10, 5))
-sns.barplot(x="RMSE", y="Model", data=final_reg_df, palette="magma")
+sns.barplot(x="RMSE", y="Model", data=final_reg_data_fram, palette="magma")
 plt.title("Regression Models Comparison (RMSE - Lower is Better)")
 plt.show()
 
-best_model_name = final_reg_df.iloc[0]['Model']
+best_model_name = final_reg_data_fram.iloc[0]['Model']
 print(f"\nPlotting Residuals for best model: {best_model_name}")
 
 plt.figure(figsize=(8, 8))
@@ -697,7 +634,7 @@ f1_scorer = make_scorer(f1_score)
 
 #XGBoost
 
-print("\nRunning RandomizedSearchCV for XGBoost (Boosting)...")
+print("\nRunning RandomizedSearchCV for XGBoost (Boosting) ")
 
 xgb_params = {
     'n_estimators': [100, 200],
@@ -807,8 +744,8 @@ plt.show()
 
 #Stacking
 
-print("\nBuilding Final Stacking Ensemble...")
-stacking_final = StackingClassifier(
+print("\nBuilding Final Stacking Ensemble ")
+stack_model = StackingClassifier(
     estimators=[
         ('tuned_xgb', best_xgb),
         ('tuned_rf', best_rf)
@@ -817,8 +754,8 @@ stacking_final = StackingClassifier(
     cv=tscv
 )
 
-stacking_final.fit(X_train, y_train)
-y_pred_stack = stacking_final.predict(X_val)
+stack_model.fit(X_train, y_train)
+y_pred_stack = stack_model.predict(X_val)
 print(f"Final Stacking F1 Score: {f1_score(y_val, y_pred_stack):.4f}")
 
 
@@ -857,13 +794,13 @@ from sklearn.metrics import roc_curve, auc, precision_recall_curve, average_prec
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-print("=== Generating Evaluation Plots ===")
+print("Plotting evaluation metrics")
 
-final_model = stacking_final  
-y_pred = final_model.predict(X_val)
-y_prob = final_model.predict_proba(X_val)[:, 1]
+best_model = stack_model  
+y_pred = best_model.predict(X_val)
+y_prob = best_model.predict_proba(X_val)[:, 1]
 
-# 1. ROC Curve & PR Curve
+# 1. ROC Curve and PR Curve
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
 
@@ -888,7 +825,7 @@ ax2.set_ylabel('Precision')
 ax2.legend()
 plt.show()
 
-# 2. Confusion Matrix & Calibration
+# 2. Confusion Matrix and Calibration
 fig, (ax3, ax4) = plt.subplots(1, 2, figsize=(16, 6))
 
 # Confusion Matrix
@@ -968,7 +905,7 @@ plt.figure(figsize=(10, 6))
 shap.summary_plot(shap_values, X_shap_sample) # Dot plot
 plt.show()
 
-#Robustness & Stress Test
+#Robustness and Stress Test
 
 print("=== Robustness Test: Adding Noise ===")
 
@@ -976,8 +913,8 @@ X_val_noisy = X_val.copy()
 noise = np.random.normal(0, 5, size=len(X_val_noisy)) 
 X_val_noisy['days_since_prior_order'] = X_val_noisy['days_since_prior_order'] + noise
 
-print("Evaluating model on Noisy Data...")
-y_pred_noisy = final_model.predict(X_val_noisy)
+print("Evaluating model on Noisy Data ")
+y_pred_noisy = best_model.predict(X_val_noisy)
 f1_noisy = f1_score(y_val, y_pred_noisy)
 
 print(f"Original F1 Score: {f1_score(y_val, y_pred):.4f}")
@@ -1025,7 +962,7 @@ model_nn.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accurac
 early_stop = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
 
 
-print("Training Neural Network...")
+print("Training Neural Network ")
 history = model_nn.fit(
     X_train, y_train,
     validation_data=(X_val, y_val),
@@ -1072,7 +1009,7 @@ import onnxruntime as rt
 
 
 if 'best_rf' not in locals():
-    print("Warning: 'best_rf' not found, training a small RF for demo...")
+    print("Warning: 'best_rf' not found, training a small RF for demo ")
     best_rf = RandomForestClassifier(n_estimators=10, max_depth=5).fit(X_train, y_train)
 
 
@@ -1126,7 +1063,7 @@ feature_cols_h2o = [c for c in train_h2o.columns if c != target_col_h2o]
 train_h2o[target_col_h2o] = train_h2o[target_col_h2o].asfactor()
 test_h2o[target_col_h2o] = test_h2o[target_col_h2o].asfactor()
 
-print("Running H2O AutoML (Limit: 5 models or 60 seconds)...")
+print("Running H2O AutoML (Limit: 5 models or 60 seconds) ")
 aml = H2OAutoML(max_models=5, max_runtime_secs=120, seed=42, project_name="Instacart_Bonus")
 aml.train(x=feature_cols_h2o, y=target_col_h2o, training_frame=train_h2o)
 

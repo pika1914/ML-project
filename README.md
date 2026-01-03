@@ -1,3 +1,4 @@
+#read me:https://github.com/pika1914/read-me.git
 # ML-project
 from google.colab import drive
 drive.mount('/content/drive')

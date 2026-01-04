@@ -497,8 +497,7 @@ data_fram_reg = data_fram[data_fram['days_since_prior_order'] >= 0].copy()
 target_reg = 'days_since_prior_order'
 
 
-drop_cols_reg = [target_reg, 'log_days_since_prior', 'order_id', 'user_id', 
-                 'product_id', 'eval_set', 'product_name', 'department', 'aisle']
+drop_cols_reg = [target_reg, 'log_days_since_prior', 'order_id', 'user_id', 'product_id', 'eval_set', 'product_name', 'department', 'aisle']
 
 features_reg = [c for c in data_fram_reg.columns if c not in drop_cols_reg]
 print(f"Regression Features ({len(features_reg)}): {features_reg}")
@@ -568,10 +567,7 @@ for name, model in reg_models.items():
 X_train_sub_s = X_train_reg_s[:10000]
 y_train_sub = y_train_reg.iloc[:10000]
 
-svr_models = [
-    ("SVR (Linear)", SVR(kernel='linear')),
-    ("SVR (RBF)", SVR(kernel='rbf'))
-]
+svr_models = [("SVR (Linear)", SVR(kernel='linear')),("SVR (RBF)", SVR(kernel='rbf'))]
 
 for name, model in svr_models:
     start_time = time.time()
@@ -587,13 +583,8 @@ for name, model in svr_models:
 
 #Stacked Regressor
 
-stack_reg = StackingRegressor(
-    estimators=[
-        ('rf', RandomForestRegressor(n_estimators=50, max_depth=10, random_state=42)),
-        ('xgb', XGBRegressor(n_estimators=50, max_depth=5, random_state=42))
-    ],
-    final_estimator=Ridge()
-)
+stack_reg = StackingRegressor(estimators=[('rf', RandomForestRegressor(n_estimators=50, max_depth=10, random_state=42)),('xgb', XGBRegressor(n_estimators=50, max_depth=5, random_state=42))],final_estimator=Ridge())
+
 stack_reg.fit(X_train_reg, y_train_reg)
 y_pred_stack = stack_reg.predict(X_val_reg)
 
@@ -637,27 +628,11 @@ f1_scorer = make_scorer(f1_score)
 
 print("\nRunning RandomizedSearchCV for XGBoost (Boosting) ")
 
-xgb_params = {
-    'n_estimators': [100, 200],
-    'max_depth': [3, 6, 10],
-    'learning_rate': [0.01, 0.1, 0.2],
-    'subsample': [0.7, 0.9],
-    'colsample_bytree': [0.7, 0.9],
-    'scale_pos_weight': [1, 10] 
-}
+xgb_params = {'n_estimators': [100, 200],'max_depth': [3, 6, 10],'learning_rate': [0.01, 0.1, 0.2],'subsample': [0.7, 0.9],'colsample_bytree': [0.7, 0.9],'scale_pos_weight': [1, 10] }
 
 xgb_model = XGBClassifier(eval_metric='logloss', random_state=42, n_jobs=-1)
 
-xgb_search = RandomizedSearchCV(
-    estimator=xgb_model,
-    param_distributions=xgb_params,
-    n_iter=10, 
-    scoring=f1_scorer,
-    cv=tscv, 
-    verbose=1,
-    random_state=42,
-    n_jobs=-1
-)
+xgb_search = RandomizedSearchCV(estimator=xgb_model,param_distributions=xgb_params,n_iter=10, scoring=f1_scorer,cv=tscv, verbose=1,random_state=42,n_jobs=-1)
 
 
 xgb_search.fit(X_train.iloc[:50000], y_train.iloc[:50000])
@@ -668,22 +643,11 @@ print(f"Best XGBoost F1 Score (CV): {xgb_search.best_score_:.4f}")
 
 #Random Forest
 
-rf_params = {
-    'n_estimators': [50, 100],
-    'max_depth': [10, 15],
-    'min_samples_split': [2, 5]
-}
+rf_params = {'n_estimators': [50, 100],'max_depth': [10, 15],'min_samples_split': [2, 5]}
 
 rf_model = RandomForestClassifier(class_weight='balanced', random_state=42, n_jobs=-1)
 
-rf_grid = GridSearchCV(
-    estimator=rf_model,
-    param_grid=rf_params,
-    scoring=f1_scorer,
-    cv=tscv, 
-    verbose=1,
-    n_jobs=-1
-)
+rf_grid = GridSearchCV(estimator=rf_model,param_grid=rf_params,scoring=f1_scorer,cv=tscv, verbose=1,n_jobs=-1)
 
 rf_grid.fit(X_train.iloc[:20000], y_train.iloc[:20000]) 
 
@@ -711,22 +675,21 @@ print(f"Tuned Random Forest F1 on Validation: {f1_score(y_val, y_pred_rf):.4f}")
 
 from sklearn.decomposition import PCA
 
-# 1. Reduce to 2D for visualization
+# 1_ Reduce to 2D for visualization
 pca = PCA(n_components=2)
 X_vis = pca.fit_transform(X_val.iloc[:500]) # Take a sample
 y_vis = y_val.iloc[:500].values
 
-# 2. Train a simple model on 2D data for visualization purpose
+# 2_ Train a simple model on 2D data for visualization purpose
 clf_vis = DecisionTreeClassifier(max_depth=5)
 clf_vis.fit(X_vis, y_vis)
 
-# 3. Create a meshgrid
+# 3_ Create a meshgrid
 x_min, x_max = X_vis[:, 0].min() - 1, X_vis[:, 0].max() + 1
 y_min, y_max = X_vis[:, 1].min() - 1, X_vis[:, 1].max() + 1
-xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.1),
-                     np.arange(y_min, y_max, 0.1))
+xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.1),np.arange(y_min, y_max, 0.1))
 
-# 4. Predict and Plot
+# 4_ predict
 Z = clf_vis.predict(np.c_[xx.ravel(), yy.ravel()])
 Z = Z.reshape(xx.shape)
 
@@ -746,14 +709,7 @@ plt.show()
 #Stacking
 
 print("\nBuilding Final Stacking Ensemble ")
-stack_model = StackingClassifier(
-    estimators=[
-        ('tuned_xgb', best_xgb),
-        ('tuned_rf', best_rf)
-    ],
-    final_estimator=LogisticRegression(class_weight='balanced'),
-    cv=tscv
-)
+stack_model = StackingClassifier(estimators=[('tuned_xgb', best_xgb),('tuned_rf', best_rf)],final_estimator=LogisticRegression(class_weight='balanced'),cv=tscv)
 
 stack_model.fit(X_train, y_train)
 y_pred_stack = stack_model.predict(X_val)
